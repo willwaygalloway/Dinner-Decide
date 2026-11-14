@@ -1,0 +1,445 @@
+<title>Dinner Decide</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600&display=swap">
+<style>
+/* Layout: one narrow phone column; sticky week bar on top, tab bar fixed at the bottom. */
+:root {
+  --bg: #f3f6f1;
+  --surface: #ffffff;
+  --fg: #1d2a22;
+  --muted: #5f6f64;
+  --line: #d7e0d8;
+  --accent: #2f7a4a;      /* basil */
+  --accent-fg: #ffffff;
+  --accent-soft: #dcefe2;
+  --warm: #c2502f;        /* tomato, used sparingly */
+  --warm-soft: #f8e1d9;
+  --c-pasta: #e7b33a; --c-rice: #7fa8c9; --c-bread: #b98552; --c-potato: #a3a35a; --c-noodles: #cc7a9e; --c-other: #8a958d;
+  --display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121814; --surface: #1b231e; --fg: #e5ede7; --muted: #9aaa9f; --line: #2c3830;
+  --accent: #5cb87d; --accent-fg: #0d1a12; --accent-soft: #1f3a29; --warm: #ec8a68; --warm-soft: #3a231b; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #121814; --surface: #1b231e; --fg: #e5ede7; --muted: #9aaa9f; --line: #2c3830;
+  --accent: #5cb87d; --accent-fg: #0d1a12; --accent-soft: #1f3a29; --warm: #ec8a68; --warm-soft: #3a231b; color-scheme: dark }
+
+html, body { min-height: 100%; }
+body { background: var(--bg); color: var(--fg); font: 16px/1.45 var(--body); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+.wrap { max-width: 560px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { font-family: var(--display); font-weight: 800; margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); }
+header.top .wrap { display: flex; align-items: center; gap: 8px; padding-block: 12px; }
+.brand { font-family: var(--display); font-weight: 800; font-size: 20px; flex: 1; min-width: 0; }
+.brand small { display: block; font-family: var(--body); font-weight: 500; font-size: 13px; color: var(--muted); letter-spacing: 0; }
+.iconbtn { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; width: 38px; height: 38px; font-size: 18px; line-height: 1; }
+.whoami { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 12px; font-size: 14px; font-weight: 600; white-space: nowrap; }
+
+main { padding-block: 18px calc(96px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 18px; }
+.lede { color: var(--muted); margin: 4px 0 0; }
+.note { background: var(--warm-soft); color: var(--fg); border-radius: 12px; padding: 10px 14px; font-size: 14px; }
+
+.group h3 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.08em; display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c-other); flex: none; }
+.group h3 .count { margin-left: auto; font-family: var(--body); font-weight: 500; color: var(--muted); letter-spacing: 0; text-transform: none; font-size: 13px; }
+.list { display: grid; gap: 6px; }
+
+.meal { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; background: var(--surface); border: 1.5px solid var(--line); border-radius: 12px; padding: 12px 14px; min-height: 52px; }
+.meal .name { flex: 1; min-width: 0; font-weight: 500; }
+.meal .tick { width: 26px; height: 26px; border-radius: 8px; border: 2px solid var(--line); display: grid; place-items: center; flex: none; font-weight: 800; color: transparent; }
+.meal[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.meal[aria-pressed="true"] .tick { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.meal:disabled { cursor: default; opacity: 0.55; }
+.meal .tag { font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+.btn { border: 0; border-radius: 12px; padding: 14px 18px; font-weight: 600; background: var(--accent); color: var(--accent-fg); width: 100%; font-size: 16px; }
+.btn.ghost { background: transparent; color: var(--accent); border: 1.5px solid var(--accent); }
+.btn.small { width: auto; padding: 8px 14px; font-size: 14px; }
+.btn:disabled { opacity: 0.45; cursor: default; }
+.sticky-done { position: sticky; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+
+.status { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.person { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.person b { display: block; }
+.pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; margin-top: 4px; }
+.pill.done { background: var(--accent-soft); color: var(--accent); }
+.pill.wait { background: var(--warm-soft); color: var(--warm); }
+
+.plan { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px; display: grid; gap: 12px; }
+.plan-head { display: flex; align-items: baseline; gap: 10px; }
+.plan-head h2 { font-size: 22px; flex: 1; }
+.tally { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--muted); }
+.tally.full { color: var(--accent); }
+.dinners { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.dinners li { display: flex; align-items: center; gap: 10px; padding: 10px 4px; border-bottom: 1px dashed var(--line); }
+.dinners li:last-child { border-bottom: 0; }
+.dinners .num { font-family: var(--display); font-weight: 800; color: var(--muted); width: 1.4em; font-variant-numeric: tabular-nums; }
+.dinners .name { flex: 1; min-width: 0; font-weight: 500; }
+.dinners .carb { font-size: 12px; color: var(--muted); }
+.x { border: 0; background: transparent; color: var(--muted); font-size: 20px; width: 36px; height: 36px; border-radius: 8px; }
+.x:hover { background: var(--warm-soft); color: var(--warm); }
+.empty-slot { color: var(--muted); font-style: italic; }
+
+nav.tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; background: var(--surface); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom, 0px); }
+nav.tabs .wrap { display: grid; grid-template-columns: repeat(3, 1fr); }
+nav.tabs button { border: 0; background: transparent; padding: 12px 4px 14px; font-weight: 600; color: var(--muted); font-size: 15px; border-top: 3px solid transparent; }
+nav.tabs button[aria-current="page"] { color: var(--accent); border-top-color: var(--accent); }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px; display: grid; gap: 12px; }
+label { font-weight: 600; font-size: 14px; display: grid; gap: 6px; }
+input, select { font: inherit; padding: 11px 12px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--bg); color: var(--fg); width: 100%; min-width: 0; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+.row > * { flex: 1 1 140px; }
+.choice { display: grid; gap: 10px; }
+.manage .meal { cursor: default; }
+.del { border: 0; background: transparent; color: var(--muted); font-size: 13px; font-weight: 600; padding: 6px 8px; border-radius: 8px; }
+.del.confirm { background: var(--warm); color: #fff; }
+.muted { color: var(--muted); }
+.center { text-align: center; }
+@media (prefers-reduced-motion: no-preference) { .meal, .btn, nav.tabs button { transition: background .15s, border-color .15s, color .15s; } }
+</style>
+
+<header class="top"><div class="wrap">
+  <button class="iconbtn" id="prevWeek" aria-label="Previous week">‹</button>
+  <div class="brand">Dinner Decide<small id="weekLabel">This week</small></div>
+  <button class="iconbtn" id="nextWeek" aria-label="Next week">›</button>
+  <button class="whoami" id="whoBtn" hidden></button>
+</div></header>
+
+<main class="wrap" id="app" aria-live="polite">
+  <p class="muted center">Loading your meals…</p>
+</main>
+
+<nav class="tabs" id="tabs" hidden><div class="wrap">
+  <button data-tab="pick">Pick</button>
+  <button data-tab="week">This week</button>
+  <button data-tab="meals">Meals</button>
+</div></nav>
+
+<script>
+const TARGET = 6;
+const CARB_COLORS = { pasta: "var(--c-pasta)", rice: "var(--c-rice)", bread: "var(--c-bread)", potato: "var(--c-potato)", noodles: "var(--c-noodles)" };
+const store = {
+  get(k) { try { return localStorage.getItem("dd:" + k); } catch { return null; } },
+  set(k, v) { try { v == null ? localStorage.removeItem("dd:" + k) : localStorage.setItem("dd:" + k, v); } catch {} }
+};
+
+function mondayOf(d) { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); const dow = (x.getDay() + 6) % 7; x.setDate(x.getDate() - dow); return x; }
+function defaultWeek() { const t = new Date(); const m = mondayOf(t); if (t.getDay() === 6 || t.getDay() === 0) m.setDate(m.getDate() + 7); return m; }
+function weekId(m) { return m.getFullYear() + "-" + String(m.getMonth() + 1).padStart(2, "0") + "-" + String(m.getDate()).padStart(2, "0"); }
+function weekLabel(m) {
+  const cur = weekId(defaultWeek()) === weekId(m);
+  return (cur ? "Week of " : "Week of ") + m.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }) + (cur ? " · planning now" : "");
+}
+function slug(s) { return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "meal"; }
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function hash(str) { let h = 2166136261; for (const c of str) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+
+const S = {
+  db: null, offline: false, slow: false, readOnly: false,
+  meals: null, people: null,
+  me: store.get("me"),
+  week: defaultWeek(),
+  picks: {}, plan: null, weekLoaded: false,
+  draft: null, saveTimer: null,
+  tab: store.get("tab") || "pick",
+  pendingDelete: null,
+  editingNames: false,
+};
+let unsubWeek = [];
+
+// ---------- data helpers ----------
+function carbs() {
+  const order = []; const seen = new Set();
+  for (const m of sortedMeals()) { const c = m.carb || "Other"; if (!seen.has(c)) { seen.add(c); order.push(c); } }
+  return order;
+}
+function sortedMeals() { return (S.meals || []).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name)); }
+function mealById(id) { return (S.meals || []).find(m => m.id === id); }
+function carbColor(c) { return CARB_COLORS[(c || "").toLowerCase()] || "var(--c-other)"; }
+function personName(k) { return (S.people && S.people[k]) || (k === "a" ? "Person 1" : "Person 2"); }
+function other(k) { return k === "a" ? "b" : "a"; }
+function myPicks() { if (S.draft) return S.draft; const p = S.picks[S.me]; return new Set((p && p.meals) || []); }
+function isDone(k) { return !!(S.picks[k] && S.picks[k].done); }
+function validIds(arr) { return (arr || []).filter(id => mealById(id)); }
+
+function suggestion(matched) {
+  // Spread across carbs: round-robin through carb groups, starting point and in-group order varied per week.
+  const wk = weekId(S.week);
+  const groups = carbs().map(c => matched.filter(id => (mealById(id).carb || "Other") === c)
+    .sort((x, y) => hash(wk + x) - hash(wk + y))).filter(g => g.length);
+  if (!groups.length) return [];
+  const start = hash(wk) % groups.length;
+  const rot = groups.slice(start).concat(groups.slice(0, start));
+  const out = [];
+  while (out.length < TARGET && rot.some(g => g.length)) for (const g of rot) { if (g.length && out.length < TARGET) out.push(g.shift()); }
+  return out;
+}
+
+// ---------- subscriptions ----------
+async function boot() {
+  const loadTimer = setTimeout(() => { if (!S.meals) { S.slow = true; render(); } }, 10000);
+  let db = null;
+  try { db = await window.claude?.use?.("db"); } catch { db = null; }
+  if (!db) { clearTimeout(loadTimer); S.offline = true; render(); return; }
+  S.db = db;
+  db.collection("meals").onSnapshot(snap => {
+    S.meals = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (!snap.metadata.fromCache) { clearTimeout(loadTimer); S.slow = false; }
+    render();
+  }, () => { clearTimeout(loadTimer); S.meals = S.meals || []; render(); });
+  db.doc("app/settings").onSnapshot(snap => { S.people = snap.exists ? (snap.data().people || {}) : {}; render(); }, () => { S.people = S.people || {}; render(); });
+  try {
+    const user = await window.claude.use("user");
+    const can = user ? await user.can("data.write") : null;
+    if (can === false) { S.readOnly = true; render(); }
+  } catch {}
+  subscribeWeek();
+}
+
+function subscribeWeek() {
+  unsubWeek.forEach(u => { try { u(); } catch {} });
+  unsubWeek = [];
+  S.picks = {}; S.plan = null; S.weekLoaded = false; S.draft = null;
+  if (!S.db) return;
+  const wk = weekId(S.week);
+  unsubWeek.push(S.db.collection("weeks/" + wk + "/picks").onSnapshot(snap => {
+    const p = {}; snap.docs.forEach(d => { p[d.id] = d.data(); });
+    S.picks = p; S.weekLoaded = true; render();
+  }, () => { S.weekLoaded = true; render(); }));
+  unsubWeek.push(S.db.doc("weeks/" + wk).onSnapshot(snap => {
+    S.plan = snap.exists ? snap.data() : null; render();
+  }, () => {}));
+}
+
+// ---------- writes ----------
+function writeErr(e) { if (e && e.code === "invalid_argument") { S.readOnly = true; render(); } }
+function savePicks(done) {
+  clearTimeout(S.saveTimer); S.saveTimer = null;
+  const meals = [...myPicks()];
+  const body = { meals, done: !!done, updatedAt: Date.now() };
+  S.db.doc("weeks/" + weekId(S.week) + "/picks/" + S.me).set(body).then(() => { if (!S.saveTimer) S.draft = null; }).catch(writeErr);
+}
+function queueSave() { clearTimeout(S.saveTimer); S.saveTimer = setTimeout(() => savePicks(false), 700); }
+function savePlan(final) { S.db.doc("weeks/" + weekId(S.week)).set({ final, updatedAt: Date.now() }).catch(writeErr); }
+
+// ---------- views ----------
+function viewSetup() {
+  const p = S.people || {};
+  const named = p.a && p.b && !S.editingNames;
+  if (!named) return `
+    <section class="card">
+      <h2>Who's deciding?</h2>
+      <p class="lede">Enter both your names once. Each phone remembers who it belongs to.</p>
+      <form id="namesForm" class="choice">
+        <label>First person<input id="nameA" maxlength="30" required value="${esc(p.a || "")}" autocomplete="given-name"></label>
+        <label>Second person<input id="nameB" maxlength="30" required value="${esc(p.b || "")}"></label>
+        <button class="btn" ${S.readOnly ? "disabled" : ""}>Save names</button>
+      </form>
+    </section>`;
+  return `
+    <section class="card">
+      <h2>Which one are you?</h2>
+      <p class="lede">This phone will remember. You can switch any time from the top bar.</p>
+      <div class="choice">
+        <button class="btn" data-me="a">I'm ${esc(p.a)}</button>
+        <button class="btn" data-me="b">I'm ${esc(p.b)}</button>
+      </div>
+      <button class="btn ghost small" id="renameBtn">Change names</button>
+    </section>`;
+}
+
+function mealGroups(ids, renderItem) {
+  return carbs().map(c => {
+    const items = ids.filter(id => (mealById(id)?.carb || "Other") === c);
+    if (!items.length) return "";
+    return `<section class="group"><h3><span class="dot" style="background:${carbColor(c)}"></span>${esc(c)}<span class="count">${items.length}</span></h3><div class="list">${items.map(renderItem).join("")}</div></section>`;
+  }).join("");
+}
+
+function viewPick() {
+  const me = S.me, them = other(me);
+  const picks = myPicks();
+  const done = isDone(me) && !S.draft;
+  const all = sortedMeals().map(m => m.id);
+  if (!all.length) return `<section class="card"><h2>No meals yet</h2><p class="lede">Add your meals on the Meals tab, then come back to pick.</p></section>`;
+  const head = done
+    ? `<section><h1>Picks sent</h1><p class="lede">${isDone(them) ? `${esc(personName(them))} has finished too. See what you both picked on This week.` : `Waiting for ${esc(personName(them))} to finish. Their picks stay hidden until then.`}</p></section>`
+    : `<section><h1>What would you eat this week?</h1><p class="lede">Tick everything you'd be happy with. ${esc(personName(them))} won't see your picks until you've both finished.</p></section>`;
+  const body = mealGroups(all, id => {
+    const m = mealById(id); const on = picks.has(id);
+    return `<button class="meal" data-pick="${esc(id)}" aria-pressed="${on}" ${done || S.readOnly ? "disabled" : ""}><span class="name">${esc(m.name)}</span><span class="tick">✓</span></button>`;
+  });
+  const foot = done
+    ? `<div class="row"><button class="btn ghost" id="editPicks">Change my picks</button>${isDone(them) ? `<button class="btn" data-goto="week">See this week</button>` : ""}</div>`
+    : `<div class="sticky-done"><button class="btn" id="donePicks" ${S.readOnly ? "disabled" : ""}>Done · ${picks.size} picked</button></div>`;
+  return head + body + foot;
+}
+
+function viewWeek() {
+  const me = S.me, them = other(me);
+  if (!S.weekLoaded) return `<p class="muted center">Loading this week…</p>`;
+  const status = `<div class="status">${["a", "b"].map(k => `<div class="person"><b>${esc(personName(k))}${k === me ? " (you)" : ""}</b><span class="pill ${isDone(k) ? "done" : "wait"}">${isDone(k) ? "Finished picking" : "Still picking"}</span></div>`).join("")}</div>`;
+  if (!isDone("a") || !isDone("b")) {
+    return `<section><h1>Not decided yet</h1><p class="lede">Once you've both tapped Done on the Pick tab, your matches show up here.</p></section>${status}
+      ${!isDone(me) ? `<button class="btn" data-goto="pick">Make my picks</button>` : ""}`;
+  }
+  const A = new Set(validIds(S.picks.a.meals)), B = new Set(validIds(S.picks.b.meals));
+  const order = sortedMeals().map(m => m.id);
+  const matched = order.filter(id => A.has(id) && B.has(id));
+  const onlyOne = order.filter(id => A.has(id) !== B.has(id));
+  const final = S.plan && Array.isArray(S.plan.final) ? validIds(S.plan.final) : suggestion(matched);
+  const finalSet = new Set(final);
+  const full = final.length >= TARGET;
+
+  const slots = [];
+  for (let i = 0; i < TARGET; i++) {
+    const id = final[i]; const m = id && mealById(id);
+    slots.push(m
+      ? `<li><span class="num">${i + 1}</span><span class="dot" style="background:${carbColor(m.carb)}"></span><span class="name">${esc(m.name)} <span class="carb">· ${esc(m.carb || "Other")}</span></span><button class="x" data-remove="${esc(id)}" aria-label="Remove ${esc(m.name)}" ${S.readOnly ? "disabled" : ""}>×</button></li>`
+      : `<li><span class="num">${i + 1}</span><span class="name empty-slot">Pick one below</span></li>`);
+  }
+  const addBtn = (id, tag) => { const m = mealById(id); return `<button class="meal" data-add="${esc(id)}" aria-pressed="false" ${full || S.readOnly ? "disabled" : ""}><span class="dot" style="background:${carbColor(m.carb)}"></span><span class="name">${esc(m.name)}</span>${tag ? `<span class="tag">${esc(tag)}</span>` : ""}<span class="tick">+</span></button>`; };
+  const spareMatched = matched.filter(id => !finalSet.has(id));
+  const spareOne = onlyOne.filter(id => !finalSet.has(id));
+
+  let intro;
+  if (matched.length >= TARGET) intro = `You both picked ${matched.length} of the same meals. Here's a mix of ${TARGET} across the carbs. Remove one to swap in another.`;
+  else if (matched.length) intro = `You both picked ${matched.length}. Choose ${TARGET - matched.length} more together from the meals only one of you picked.`;
+  else intro = `None of your picks matched this time. Choose ${TARGET} together from the lists below.`;
+
+  return `<section><h1>This week's dinners</h1><p class="lede">${intro}</p></section>
+    <section class="plan">
+      <div class="plan-head"><h2>Dinners</h2><span class="tally ${full ? "full" : ""}">${Math.min(final.length, TARGET)} / ${TARGET}</span></div>
+      <ol class="dinners">${slots.join("")}</ol>
+      ${S.plan ? `<button class="btn ghost small" id="resetPlan" ${S.readOnly ? "disabled" : ""}>Go back to the suggested mix</button>` : ""}
+    </section>
+    ${spareMatched.length ? `<section class="group"><h3>Also picked by both of you<span class="count">${spareMatched.length}</span></h3><div class="list">${spareMatched.map(id => addBtn(id)).join("")}</div></section>` : ""}
+    ${spareOne.length ? `<section class="group"><h3>Picked by one of you<span class="count">${spareOne.length}</span></h3><div class="list">${spareOne.map(id => addBtn(id, A.has(id) ? personName("a") : personName("b"))).join("")}</div></section>` : ""}
+    ${full && (spareMatched.length || spareOne.length) ? `<p class="muted center">All ${TARGET} dinners chosen. Remove one to swap.</p>` : ""}
+    ${status}`;
+}
+
+function viewMeals() {
+  const groups = mealGroups(sortedMeals().map(m => m.id), id => {
+    const m = mealById(id); const conf = S.pendingDelete === id;
+    return `<div class="meal"><span class="name">${esc(m.name)}</span><button class="del ${conf ? "confirm" : ""}" data-del="${esc(id)}" ${S.readOnly ? "disabled" : ""}>${conf ? "Tap to remove" : "Remove"}</button></div>`;
+  });
+  const opts = carbs().map(c => `<option>${esc(c)}</option>`).join("");
+  return `<section><h1>Your meals</h1><p class="lede">${(S.meals || []).length} meals you both enjoy, grouped by carb.</p></section>
+    <form class="card" id="addForm">
+      <h2>Add a meal</h2>
+      <div class="row">
+        <label>Meal<input id="newName" maxlength="60" required placeholder="e.g. Fajitas"></label>
+        <label>Carb<select id="newCarb">${opts}<option value="__new">New carb…</option></select></label>
+      </div>
+      <label id="newCarbWrap" hidden>New carb name<input id="newCarbName" maxlength="30"></label>
+      <button class="btn" ${S.readOnly ? "disabled" : ""}>Add meal</button>
+    </form>
+    <div class="manage">${groups}</div>`;
+}
+
+function render() {
+  const app = document.getElementById("app");
+  document.getElementById("weekLabel").textContent = weekLabel(S.week);
+  const tabs = document.getElementById("tabs"), who = document.getElementById("whoBtn");
+  if (S.offline) {
+    app.innerHTML = `<section class="card"><h2>Open this in Claude to use it</h2><p class="lede">Dinner Decide keeps your picks in a shared store that only works when the page is opened from its claude.ai link while signed in.</p></section>`;
+    tabs.hidden = true; who.hidden = true; return;
+  }
+  if (!S.meals || S.people === null) {
+    app.innerHTML = `<p class="muted center">${S.slow ? "Can't reach your meals yet. Check your connection; this page keeps trying." : "Loading your meals…"}</p>`;
+    tabs.hidden = true; who.hidden = true; return;
+  }
+  const ro = S.readOnly ? `<p class="note">You can look but not change anything. Ask whoever shared this to give you Contributor access.</p>` : "";
+  const named = S.people.a && S.people.b;
+  if (!named || !S.me || !S.people[S.me] || S.editingNames) {
+    app.innerHTML = ro + viewSetup(); tabs.hidden = true; who.hidden = true; return;
+  }
+  who.hidden = false; who.textContent = personName(S.me);
+  tabs.hidden = false;
+  tabs.querySelectorAll("button").forEach(b => b.setAttribute("aria-current", b.dataset.tab === S.tab ? "page" : "false"));
+  const focusId = document.activeElement && document.activeElement.id;
+  const scrollY = window.scrollY;
+  const keep = {}; ["newName", "newCarbName"].forEach(id => { const el = document.getElementById(id); if (el) keep[id] = el.value; });
+  const carbSel = document.getElementById("newCarb"); const keepCarb = carbSel && carbSel.value;
+  app.innerHTML = ro + (S.tab === "week" ? viewWeek() : S.tab === "meals" ? viewMeals() : viewPick());
+  Object.entries(keep).forEach(([id, v]) => { const el = document.getElementById(id); if (el) el.value = v; });
+  const sel = document.getElementById("newCarb");
+  if (sel && keepCarb) { sel.value = keepCarb; document.getElementById("newCarbWrap").hidden = sel.value !== "__new"; }
+  if (focusId) { const el = document.getElementById(focusId); if (el && el.tagName === "INPUT") el.focus(); }
+  window.scrollTo(0, scrollY);
+}
+
+// ---------- events ----------
+document.addEventListener("click", e => {
+  const t = e.target.closest("button"); if (!t) return;
+  if (t.dataset.tab || t.dataset.goto) { S.tab = t.dataset.tab || t.dataset.goto; store.set("tab", S.tab); S.pendingDelete = null; render(); window.scrollTo(0, 0); return; }
+  if (t.dataset.me) { S.me = t.dataset.me; store.set("me", S.me); S.tab = "pick"; render(); return; }
+  if (t.id === "renameBtn") { S.editingNames = true; render(); return; }
+  if (t.id === "whoBtn") { S.me = null; store.set("me", null); S.draft = null; render(); return; }
+  if (t.id === "prevWeek" || t.id === "nextWeek") {
+    if (S.saveTimer) savePicks(false);
+    S.week = new Date(S.week); S.week.setDate(S.week.getDate() + (t.id === "prevWeek" ? -7 : 7));
+    subscribeWeek(); render(); return;
+  }
+  if (t.dataset.pick) {
+    const set = new Set(myPicks()); const id = t.dataset.pick;
+    set.has(id) ? set.delete(id) : set.add(id);
+    S.draft = set; render(); queueSave(); return;
+  }
+  if (t.id === "donePicks") { S.draft = new Set(myPicks()); render(); savePicks(true); S.draft = null; S.picks[S.me] = { meals: [...myPicks()], done: true }; render(); window.scrollTo(0, 0); return; }
+  if (t.id === "editPicks") { S.draft = new Set(myPicks()); savePicks(false); render(); return; }
+  if (t.dataset.remove || t.dataset.add) {
+    const A = new Set(S.picks.a.meals || []), B = new Set(S.picks.b.meals || []);
+    const matched = sortedMeals().map(m => m.id).filter(id => A.has(id) && B.has(id));
+    let final = S.plan && Array.isArray(S.plan.final) ? validIds(S.plan.final) : suggestion(matched);
+    if (t.dataset.remove) final = final.filter(id => id !== t.dataset.remove);
+    else if (final.length < TARGET && !final.includes(t.dataset.add)) final = final.concat(t.dataset.add);
+    S.plan = { final }; render(); savePlan(final); return;
+  }
+  if (t.id === "resetPlan") { S.plan = null; render(); S.db.doc("weeks/" + weekId(S.week)).delete().catch(writeErr); return; }
+  if (t.dataset.del) {
+    const id = t.dataset.del;
+    if (S.pendingDelete === id) { S.pendingDelete = null; S.db.doc("meals/" + id).delete().catch(writeErr); }
+    else { S.pendingDelete = id; render(); }
+    return;
+  }
+});
+
+document.addEventListener("change", e => {
+  if (e.target.id === "newCarb") document.getElementById("newCarbWrap").hidden = e.target.value !== "__new";
+});
+
+document.addEventListener("submit", e => {
+  e.preventDefault();
+  if (e.target.id === "namesForm") {
+    const a = document.getElementById("nameA").value.trim(), b = document.getElementById("nameB").value.trim();
+    if (!a || !b) return;
+    S.people = { a, b }; S.editingNames = false; render();
+    S.db.doc("app/settings").set({ people: { a, b } }).catch(writeErr);
+  }
+  if (e.target.id === "addForm") {
+    const name = document.getElementById("newName").value.trim();
+    let carb = document.getElementById("newCarb").value;
+    if (carb === "__new") carb = document.getElementById("newCarbName").value.trim();
+    if (!name || !carb) return;
+    let id = slug(name); while (mealById(id)) id += "-2";
+    const maxOrder = Math.max(0, ...(S.meals || []).map(m => m.order ?? 0));
+    const sameCarb = (S.meals || []).filter(m => m.carb === carb);
+    const order = sameCarb.length ? Math.max(...sameCarb.map(m => m.order ?? 0)) + 0.5 : maxOrder + 100;
+    S.db.doc("meals/" + id).set({ name, carb, order }).catch(writeErr);
+    document.getElementById("newName").value = "";
+    const nc = document.getElementById("newCarbName"); if (nc) nc.value = "";
+  }
+});
+
+render();
+boot();
+</script>
