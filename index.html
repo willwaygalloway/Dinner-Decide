@@ -350,14 +350,14 @@ function render() {
   document.getElementById("weekLabel").textContent = weekLabel(S.week);
   const tabs = document.getElementById("tabs"), who = document.getElementById("whoBtn");
   if (S.offline) {
-    app.innerHTML = `<section class="card"><h2>Open this in Claude to use it</h2><p class="lede">Dinner Decide keeps your picks in a shared store that only works when the page is opened from its claude.ai link while signed in.</p></section>`;
+    app.innerHTML = `<section class="card"><h2>Open this in Claude to use it</h2><p class="lede">Dinner Decide keeps your picks in a shared store that only works when you're signed in to claude.ai and open the page from its claude.ai link.</p></section>`;
     tabs.hidden = true; who.hidden = true; return;
   }
   if (!S.meals || S.people === null) {
     app.innerHTML = `<p class="muted center">${S.slow ? "Can't reach your meals yet. Check your connection; this page keeps trying." : "Loading your meals…"}</p>`;
     tabs.hidden = true; who.hidden = true; return;
   }
-  const ro = S.readOnly ? `<p class="note">You can look but not change anything. Ask whoever shared this to give you Contributor access.</p>` : "";
+  const ro = S.readOnly ? `<p class="note">You can look but not change anything. Ask whoever shared this to invite you by email as an Editor, and to turn off any public link.</p>` : "";
   const named = S.people.a && S.people.b;
   if (!named || !S.me || !S.people[S.me] || S.editingNames) {
     app.innerHTML = ro + viewSetup(); tabs.hidden = true; who.hidden = true; return;
