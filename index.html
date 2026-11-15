@@ -90,7 +90,7 @@ main { padding-block: 18px calc(96px + env(safe-area-inset-bottom, 0px)); displa
 .empty-slot { color: var(--muted); font-style: italic; }
 
 nav.tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; background: var(--surface); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom, 0px); }
-nav.tabs .wrap { display: grid; grid-template-columns: repeat(3, 1fr); }
+nav.tabs .wrap { display: grid; grid-template-columns: repeat(4, 1fr); }
 nav.tabs button { border: 0; background: transparent; padding: 12px 4px 14px; font-weight: 600; color: var(--muted); font-size: 15px; border-top: 3px solid transparent; }
 nav.tabs button[aria-current="page"] { color: var(--accent); border-top-color: var(--accent); }
 
@@ -123,6 +123,26 @@ input, select { font: inherit; padding: 11px 12px; border-radius: 10px; border: 
 .frzrow b { width: 2ch; text-align: center; font-variant-numeric: tabular-nums; font-size: 18px; font-family: var(--display); }
 .frzrow b.zero { color: var(--warm); }
 .muted { color: var(--muted); }
+.note.frost { background: var(--accent-soft); }
+.ing-count { display: block; font-size: 12px; color: var(--muted); margin-top: 3px; }
+.ing-count.none { color: var(--warm); }
+textarea { font: inherit; padding: 11px 12px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--bg); color: var(--fg); width: 100%; resize: vertical; line-height: 1.5; }
+.shop-actions > * { flex: 0 1 auto; }
+.shopline { display: flex; align-items: center; gap: 4px; }
+.shoprow { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; text-align: left; background: var(--surface); border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 14px; min-height: 52px; }
+.shoprow.static { cursor: default; }
+.shoprow .name { flex: 1; min-width: 0; font-weight: 500; }
+.shoprow .for { display: block; font-size: 12px; color: var(--muted); font-weight: 400; }
+.shoprow .box { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--line); flex: none; display: grid; place-items: center; font-size: 13px; font-weight: 800; color: transparent; }
+.shoprow[aria-pressed="true"] { background: transparent; }
+.shoprow[aria-pressed="true"] .name { text-decoration: line-through; color: var(--muted); }
+.shoprow[aria-pressed="true"] .box { background: var(--muted); border-color: var(--muted); color: var(--surface); }
+.extra-form input { flex: 1 1 200px; }
+.extra-form .btn { flex: 0 0 auto; }
+details.group summary { list-style: none; cursor: pointer; }
+details.group summary::-webkit-details-marker { display: none; }
+details.group summary h3::after { content: "Show"; font-family: var(--body); font-size: 13px; color: var(--accent); letter-spacing: 0; text-transform: none; margin-left: 8px; }
+details.group[open] summary h3::after { content: "Hide"; }
 .center { text-align: center; }
 @media (prefers-reduced-motion: no-preference) { .meal, .btn, nav.tabs button { transition: background .15s, border-color .15s, color .15s; } }
 </style>
@@ -141,6 +161,7 @@ input, select { font: inherit; padding: 11px 12px; border-radius: 10px; border: 
 <nav class="tabs" id="tabs" hidden><div class="wrap">
   <button data-tab="pick">Pick</button>
   <button data-tab="week">This week</button>
+  <button data-tab="shop">Shop</button>
   <button data-tab="meals">Meals</button>
 </div></nav>
 
@@ -173,8 +194,9 @@ const S = {
   tab: store.get("tab") || "pick",
   pendingDelete: null,
   editingNames: false,
-  editing: null, nameDraft: null,
+  editing: null, nameDraft: null, ingDraft: null,
   frzPending: {}, frzTimers: {},
+  shop: {}, shopExists: false, staples: {}, staplesExists: false, stapleMode: false, copied: false,
 };
 let unsubWeek = [];
 
@@ -231,6 +253,7 @@ async function boot() {
     if (!snap.metadata.fromCache) { clearTimeout(loadTimer); S.slow = false; }
     render();
   }, () => { clearTimeout(loadTimer); S.meals = S.meals || []; render(); });
+  db.doc("app/staples").onSnapshot(snap => { S.staplesExists = snap.exists; S.staples = snap.exists ? (snap.data().items || {}) : {}; render(); }, () => {});
   db.doc("app/settings").onSnapshot(snap => { S.people = snap.exists ? (snap.data().people || {}) : {}; render(); }, () => { S.people = S.people || {}; render(); });
   try {
     const user = await window.claude.use("user");
@@ -243,7 +266,7 @@ async function boot() {
 function subscribeWeek() {
   unsubWeek.forEach(u => { try { u(); } catch {} });
   unsubWeek = [];
-  S.picks = {}; S.plan = null; S.weekLoaded = false; S.draft = null;
+  S.picks = {}; S.plan = null; S.weekLoaded = false; S.draft = null; S.shop = {}; S.shopExists = false;
   if (!S.db) return;
   const wk = weekId(S.week);
   unsubWeek.push(S.db.collection("weeks/" + wk + "/picks").onSnapshot(snap => {
@@ -252,6 +275,9 @@ function subscribeWeek() {
   }, () => { S.weekLoaded = true; render(); }));
   unsubWeek.push(S.db.doc("weeks/" + wk).onSnapshot(snap => {
     S.plan = snap.exists ? snap.data() : null; render();
+  }, () => {}));
+  unsubWeek.push(S.db.doc("weeks/" + wk + "/shop/list").onSnapshot(snap => {
+    S.shopExists = snap.exists; S.shop = snap.exists ? snap.data() : {}; render();
   }, () => {}));
 }
 
@@ -264,7 +290,65 @@ function savePicks(done) {
   S.db.doc("weeks/" + weekId(S.week) + "/picks/" + S.me).set(body).then(() => { if (!S.saveTimer) S.draft = null; }).catch(writeErr);
 }
 function queueSave() { clearTimeout(S.saveTimer); S.saveTimer = setTimeout(() => savePicks(false), 700); }
-function savePlan(final) { S.db.doc("weeks/" + weekId(S.week)).set({ final, updatedAt: Date.now() }).catch(writeErr); }
+function adjustFreezer(m, delta) {
+  const n = Math.max(0, freezerCount(m) + delta);
+  S.frzPending[m.id] = n;
+  clearTimeout(S.frzTimers[m.id]);
+  S.frzTimers[m.id] = setTimeout(() => {
+    S.db.doc("meals/" + m.id).update({ freezer: n }).then(() => { if (S.frzPending[m.id] === n) { delete S.frzPending[m.id]; render(); } }).catch(writeErr);
+  }, 600);
+}
+function storedFinal() { return S.plan && Array.isArray(S.plan.final) ? S.plan.final : null; }
+function savePlan(final) {
+  // Defrost meals use a freezer portion while they're in the plan; taking one out puts it back.
+  const tally = arr => arr.reduce((o, id) => (o[id] = (o[id] || 0) + 1, o), {});
+  const before = tally(storedFinal() || []), after = tally(final);
+  for (const id of new Set([...Object.keys(before), ...Object.keys(after)])) {
+    const m = mealById(id); const d = (after[id] || 0) - (before[id] || 0);
+    if (m && m.defrost && d) adjustFreezer(m, -d);
+  }
+  S.plan = Object.assign({}, S.plan, { final });
+  S.db.doc("weeks/" + weekId(S.week)).set({ final, updatedAt: Date.now() }).catch(writeErr);
+}
+function matchedFrom(aMeals, bMeals) {
+  const A = new Set(aMeals || []), B = new Set(bMeals || []);
+  return sortedMeals().map(m => m.id).filter(id => A.has(id) && B.has(id));
+}
+// The week's dinners: the saved plan, or the suggested mix once both have picked.
+function weekFinal() {
+  const s = storedFinal(); if (s) return validIds(s);
+  if (isDone("a") && isDone("b")) return suggestion(matchedFrom(S.picks.a.meals, S.picks.b.meals));
+  return null;
+}
+
+// ---------- shopping list ----------
+function ingKey(name) { return slug(name.trim().replace(/\s+/g, " ")); }
+function niceName(s) { s = s.trim().replace(/\s+/g, " "); return s.charAt(0).toUpperCase() + s.slice(1); }
+function isStaple(k) { return !!(S.staples && S.staples[k]); }
+function shopDoc() { return S.db.doc("weeks/" + weekId(S.week) + "/shop/list"); }
+function writeShop(patch) {
+  // Nested maps merge on update, so two phones ticking different items never overwrite each other.
+  S.shop = deepMerge(S.shop || {}, patch); render();
+  (S.shopExists ? shopDoc().update(patch) : shopDoc().set(S.shop).then(() => { S.shopExists = true; })).catch(writeErr);
+}
+function deepMerge(a, b) { const out = Object.assign({}, a); for (const [k, v] of Object.entries(b)) out[k] = v && typeof v === "object" && !Array.isArray(v) ? deepMerge(a[k] || {}, v) : v; return out; }
+function shoppingItems(final) {
+  const items = new Map(); const missing = []; const frozen = [];
+  for (const id of final) {
+    const m = mealById(id); if (!m) continue;
+    if (m.defrost) { frozen.push(m); continue; }
+    const ings = (m.ingredients || []).filter(s => s && s.trim());
+    if (!ings.length) { missing.push(m); continue; }
+    for (const raw of ings) {
+      const k = ingKey(raw); if (!k) continue;
+      if (!items.has(k)) items.set(k, { key: k, name: niceName(raw), meals: [] });
+      items.get(k).meals.push(m.name);
+    }
+  }
+  const extras = Object.entries((S.shop && S.shop.extras) || {}).filter(([, v]) => v).map(([k, v]) => ({ key: "x-" + k, extraKey: k, name: niceName(v), meals: [] }));
+  return { items: [...items.values()].sort((x, y) => x.name.localeCompare(y.name)), extras, missing, frozen };
+}
+function isCrossed(k) { return !!(S.shop && S.shop.crossed && S.shop.crossed[k]); }
 
 // ---------- views ----------
 function viewSetup() {
@@ -331,7 +415,9 @@ function viewWeek() {
   const order = sortedMeals().map(m => m.id);
   const matched = order.filter(id => A.has(id) && B.has(id));
   const onlyOne = order.filter(id => A.has(id) !== B.has(id));
-  const final = S.plan && Array.isArray(S.plan.final) ? validIds(S.plan.final) : suggestion(matched);
+  const final = weekFinal() || [];
+  const sugg = suggestion(matched);
+  const isCustom = storedFinal() && (final.length !== sugg.length || final.some((id, i) => id !== sugg[i]));
   const finalSet = new Set(final);
   const full = final.length >= TARGET;
 
@@ -355,7 +441,7 @@ function viewWeek() {
     <section class="plan">
       <div class="plan-head"><h2>Dinners</h2><span class="tally ${full ? "full" : ""}">${Math.min(final.length, TARGET)} / ${TARGET}</span></div>
       <ol class="dinners">${slots.join("")}</ol>
-      ${S.plan ? `<button class="btn ghost small" id="resetPlan" ${S.readOnly ? "disabled" : ""}>Go back to the suggested mix</button>` : ""}
+      ${isCustom ? `<button class="btn ghost small" id="resetPlan" ${S.readOnly ? "disabled" : ""}>Go back to the suggested mix</button>` : ""}
     </section>
     ${spareMatched.length ? `<section class="group"><h3>Also picked by both of you<span class="count">${spareMatched.length}</span></h3><div class="list">${spareMatched.map(id => addBtn(id)).join("")}</div></section>` : ""}
     ${spareOne.length ? `<section class="group"><h3>Picked by one of you<span class="count">${spareOne.length}</span></h3><div class="list">${spareOne.map(id => addBtn(id, A.has(id) ? personName("a") : personName("b"))).join("")}</div></section>` : ""}
@@ -363,23 +449,64 @@ function viewWeek() {
     ${status}`;
 }
 
+function viewShop() {
+  const final = weekFinal();
+  if (!final) return `<section><h1>Shopping list</h1><p class="lede">Your list appears here once you've both finished picking this week's dinners.</p></section>
+    <button class="btn" data-goto="${isDone(S.me) ? "week" : "pick"}">${isDone(S.me) ? "See who's still picking" : "Make my picks"}</button>`;
+  const { items, extras, missing, frozen } = shoppingItems(final);
+  const main = items.filter(i => !isStaple(i.key)).concat(extras);
+  const staples = items.filter(i => isStaple(i.key));
+  const need = main.filter(i => !isCrossed(i.key)), got = main.filter(i => isCrossed(i.key));
+  const ro = S.readOnly ? "disabled" : "";
+  const row = i => {
+    if (S.stapleMode && !i.extraKey) {
+      const on = isStaple(i.key);
+      return `<div class="shoprow static"><span class="name">${esc(i.name)}</span><button class="chip" data-staple="${esc(i.key)}" data-name="${esc(i.name)}" aria-pressed="${on}" ${ro}>${on ? "Staple ✓" : "Mark as staple"}</button></div>`;
+    }
+    const x = isCrossed(i.key);
+    const forText = i.extraKey ? "Added by you" : i.meals.join(" · ");
+    return `<div class="shopline"><button class="shoprow" data-cross="${esc(i.key)}" aria-pressed="${x}" ${ro}><span class="box">✓</span><span class="name">${esc(i.name)}<span class="for">${esc(forText)}</span></span></button>${i.extraKey ? `<button class="x" data-unextra="${esc(i.extraKey)}" aria-label="Remove ${esc(i.name)}" ${ro}>×</button>` : ""}</div>`;
+  };
+  const stapleNeed = staples.filter(i => !isCrossed(i.key)).length;
+  return `<section><h1>Shopping list</h1><p class="lede">For this week's ${final.length} dinners. Tap anything you already have or have bought to cross it off. It updates on both phones.</p></section>
+    <div class="row shop-actions">
+      <button class="btn small" id="copyList" ${need.length ? "" : "disabled"}>${S.copied ? "Copied" : "Copy list"}</button>
+      <button class="btn ghost small" id="stapleMode">${S.stapleMode ? "Finish editing staples" : "Edit staples"}</button>
+    </div>
+    ${S.stapleMode ? `<p class="note">Staples are things you usually have in, like oil, spices and stock. They move into "Check the cupboard" so the main list stays short.</p>` : ""}
+    <section class="group"><h3>To get<span class="count">${need.length}</span></h3>
+      <div class="list">${need.length ? need.map(row).join("") : `<p class="muted">Nothing left to get.</p>`}</div>
+    </section>
+    <form id="extraForm" class="row extra-form">
+      <input id="extraName" maxlength="60" placeholder="Add something else, e.g. milk" aria-label="Add something else to the list">
+      <button class="btn small" ${ro}>Add</button>
+    </form>
+    ${staples.length ? `<details class="group cupboard" ${S.cupboardOpen || S.stapleMode ? "open" : ""}><summary><h3>Check the cupboard<span class="count">${stapleNeed} to check</span></h3></summary>
+      <div class="list">${staples.map(row).join("")}</div></details>` : ""}
+    ${got.length && !S.stapleMode ? `<section class="group"><h3>Crossed off<span class="count">${got.length}</span></h3><div class="list">${got.map(row).join("")}</div></section>` : ""}
+    ${frozen.length ? `<p class="note frost">From the freezer, nothing to buy: ${frozen.map(m => esc(m.name)).join(", ")}. Remember to take it out the night before.</p>` : ""}
+    ${missing.length ? `<p class="note">No ingredients yet for ${missing.map(m => esc(m.name)).join(", ")}. Add them on the Meals tab and they'll appear here.</p>` : ""}`;
+}
+
 function viewMeals() {
   const ro = S.readOnly ? "disabled" : "";
   const groups = mealGroups(sortedMeals().map(m => m.id), id => {
     const m = mealById(id);
-    if (S.editing !== id) return `<button class="meal" data-edit="${esc(id)}"><span class="name">${esc(m.name)}${badges(m)}</span><span class="edit-link">Edit</span></button>`;
+    if (S.editing !== id) { const n = (m.ingredients || []).length; return `<button class="meal" data-edit="${esc(id)}"><span class="name">${esc(m.name)}${badges(m)}<span class="ing-count${n ? "" : " none"}">${n ? n + " ingredients" : "No ingredients yet"}</span></span><span class="edit-link">Edit</span></button>`; }
     const conf = S.pendingDelete === id;
     const name = S.nameDraft && S.nameDraft.id === id ? S.nameDraft.value : m.name;
+    const ingr = S.ingDraft && S.ingDraft.id === id ? S.ingDraft.value : (m.ingredients || []).join("\n");
     const carbOpts = carbs().map(c => `<option ${c === m.carb ? "selected" : ""}>${esc(c)}</option>`).join("");
     return `<form class="meal editor" data-editform="${esc(id)}">
       <div class="row">
         <label>Meal<input id="editName" maxlength="60" required value="${esc(name)}"></label>
         <label>Carb<select id="editCarb" ${ro}>${carbOpts}</select></label>
       </div>
+      <label>Ingredients <span class="muted" style="font-weight:400">one per line</span><textarea id="editIngr" rows="${Math.max(4, ingr.split("\n").length + 1)}" placeholder="e.g.&#10;onions&#10;chopped tomatoes">${esc(ingr)}</textarea></label>
       <div class="chips">${FLAGS.map(([k, label]) => `<button type="button" class="chip" data-flag="${k}" aria-pressed="${!!m[k]}" ${ro}>${label}</button>`).join("")}</div>
-      <p class="chip-help">Tap to turn a tag on or off. Defrost meals get a freezer count at the top of this page.</p>
+      <p class="chip-help">Tags save as soon as you tap them. Defrost meals get a freezer count at the top of this page. Press Save for name and ingredient changes.</p>
       <div class="row">
-        <button class="btn small" ${ro}>Save name</button>
+        <button class="btn small" ${ro}>Save</button>
         <button type="button" class="btn ghost small" data-edit="">Close</button>
         <button type="button" class="del ${conf ? "confirm" : ""}" data-del="${esc(id)}" ${ro}>${conf ? "Tap again to remove" : "Remove meal"}</button>
       </div>
@@ -427,13 +554,13 @@ function render() {
   tabs.querySelectorAll("button").forEach(b => b.setAttribute("aria-current", b.dataset.tab === S.tab ? "page" : "false"));
   const focusId = document.activeElement && document.activeElement.id;
   const scrollY = window.scrollY;
-  const keep = {}; ["newName", "newCarbName"].forEach(id => { const el = document.getElementById(id); if (el) keep[id] = el.value; });
+  const keep = {}; ["newName", "newCarbName", "extraName"].forEach(id => { const el = document.getElementById(id); if (el) keep[id] = el.value; });
   const carbSel = document.getElementById("newCarb"); const keepCarb = carbSel && carbSel.value;
-  app.innerHTML = ro + (S.tab === "week" ? viewWeek() : S.tab === "meals" ? viewMeals() : viewPick());
+  app.innerHTML = ro + (S.tab === "week" ? viewWeek() : S.tab === "meals" ? viewMeals() : S.tab === "shop" ? viewShop() : viewPick());
   Object.entries(keep).forEach(([id, v]) => { const el = document.getElementById(id); if (el) el.value = v; });
   const sel = document.getElementById("newCarb");
   if (sel && keepCarb) { sel.value = keepCarb; document.getElementById("newCarbWrap").hidden = sel.value !== "__new"; }
-  if (focusId) { const el = document.getElementById(focusId); if (el && el.tagName === "INPUT") el.focus(); }
+  if (focusId) { const el = document.getElementById(focusId); if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) el.focus(); }
   window.scrollTo(0, scrollY);
 }
 
@@ -454,18 +581,39 @@ document.addEventListener("click", e => {
     set.has(id) ? set.delete(id) : set.add(id);
     S.draft = set; render(); queueSave(); return;
   }
-  if (t.id === "donePicks") { S.draft = new Set(myPicks()); render(); savePicks(true); S.draft = null; S.picks[S.me] = { meals: [...myPicks()], done: true }; render(); window.scrollTo(0, 0); return; }
+  if (t.id === "donePicks") {
+    const mine = [...myPicks()];
+    savePicks(true); S.draft = null; S.picks[S.me] = { meals: mine, done: true };
+    // Second person to finish saves the suggested mix, so the freezer count and shopping list follow it.
+    if (isDone(other(S.me)) && !storedFinal()) savePlan(suggestion(matchedFrom(S.picks.a.meals, S.picks.b.meals)));
+    render(); window.scrollTo(0, 0); return;
+  }
   if (t.id === "editPicks") { S.draft = new Set(myPicks()); savePicks(false); render(); return; }
   if (t.dataset.remove || t.dataset.add) {
-    const A = new Set(S.picks.a.meals || []), B = new Set(S.picks.b.meals || []);
-    const matched = sortedMeals().map(m => m.id).filter(id => A.has(id) && B.has(id));
-    let final = S.plan && Array.isArray(S.plan.final) ? validIds(S.plan.final) : suggestion(matched);
+    let final = weekFinal() || [];
     if (t.dataset.remove) final = final.filter(id => id !== t.dataset.remove);
     else if (final.length < TARGET && !final.includes(t.dataset.add)) final = final.concat(t.dataset.add);
-    S.plan = { final }; render(); savePlan(final); return;
+    savePlan(final); render(); return;
   }
-  if (t.id === "resetPlan") { S.plan = null; render(); S.db.doc("weeks/" + weekId(S.week)).delete().catch(writeErr); return; }
-  if ("edit" in t.dataset) { S.editing = t.dataset.edit || null; S.nameDraft = null; S.pendingDelete = null; render(); return; }
+  if (t.id === "resetPlan") { savePlan(suggestion(matchedFrom(S.picks.a.meals, S.picks.b.meals))); render(); return; }
+  if (t.dataset.cross) { const k = t.dataset.cross; writeShop({ crossed: { [k]: !isCrossed(k) } }); return; }
+  if (t.dataset.unextra) { writeShop({ extras: { [t.dataset.unextra]: null }, crossed: { ["x-" + t.dataset.unextra]: false } }); return; }
+  if (t.id === "stapleMode") { S.stapleMode = !S.stapleMode; render(); return; }
+  if (t.dataset.staple) {
+    const k = t.dataset.staple; const patch = { items: { [k]: isStaple(k) ? null : t.dataset.name } };
+    S.staples = Object.assign({}, S.staples, patch.items); render();
+    (S.staplesExists ? S.db.doc("app/staples").update(patch) : S.db.doc("app/staples").set({ items: S.staples }).then(() => { S.staplesExists = true; })).catch(writeErr);
+    return;
+  }
+  if (t.id === "copyList") {
+    const { items, extras } = shoppingItems(weekFinal() || []);
+    const lines = items.filter(i => !isStaple(i.key)).concat(extras).filter(i => !isCrossed(i.key)).map(i => "- " + i.name);
+    const text = "Shopping list, " + weekLabel(S.week).replace(" · planning now", "") + "\n" + lines.join("\n");
+    const done = () => { S.copied = true; render(); setTimeout(() => { S.copied = false; render(); }, 2000); };
+    try { navigator.clipboard.writeText(text).then(done, () => fallbackCopy(text, done)); } catch { fallbackCopy(text, done); }
+    return;
+  }
+  if ("edit" in t.dataset) { S.editing = t.dataset.edit || null; S.nameDraft = null; S.ingDraft = null; S.pendingDelete = null; render(); return; }
   if (t.dataset.flag) {
     const m = mealById(S.editing); if (!m) return;
     const k = t.dataset.flag; const body = { [k]: !m[k] };
@@ -475,13 +623,7 @@ document.addEventListener("click", e => {
   }
   if (t.dataset.frz) {
     const m = mealById(t.dataset.frz); if (!m) return;
-    const n = Math.max(0, freezerCount(m) + Number(t.dataset.d));
-    S.frzPending[m.id] = n; render();
-    clearTimeout(S.frzTimers[m.id]);
-    S.frzTimers[m.id] = setTimeout(() => {
-      S.db.doc("meals/" + m.id).update({ freezer: n }).then(() => { if (S.frzPending[m.id] === n) { delete S.frzPending[m.id]; render(); } }).catch(writeErr);
-    }, 600);
-    return;
+    adjustFreezer(m, Number(t.dataset.d)); render(); return;
   }
   if (t.dataset.del) {
     const id = t.dataset.del;
@@ -497,10 +639,24 @@ document.addEventListener("change", e => {
 });
 document.addEventListener("input", e => {
   if (e.target.id === "editName" && S.editing) S.nameDraft = { id: S.editing, value: e.target.value };
+  if (e.target.id === "editIngr" && S.editing) S.ingDraft = { id: S.editing, value: e.target.value };
 });
 
+function fallbackCopy(text, done) {
+  const ta = document.createElement("textarea"); ta.value = text; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
+  document.body.appendChild(ta); ta.select();
+  let ok = false; try { ok = document.execCommand("copy"); } catch {}
+  ta.remove(); if (ok) done();
+}
+document.addEventListener("toggle", e => { if (e.target.classList && e.target.classList.contains("cupboard")) S.cupboardOpen = e.target.open; }, true);
 document.addEventListener("submit", e => {
   e.preventDefault();
+  if (e.target.id === "extraForm") {
+    const v = document.getElementById("extraName").value.trim(); if (!v) return;
+    document.getElementById("extraName").value = "";
+    writeShop({ extras: { [ingKey(v) + "-" + Date.now().toString(36)]: v } });
+    return;
+  }
   if (e.target.id === "namesForm") {
     const a = document.getElementById("nameA").value.trim(), b = document.getElementById("nameB").value.trim();
     if (!a || !b) return;
@@ -510,8 +666,10 @@ document.addEventListener("submit", e => {
   if (e.target.dataset.editform) {
     const id = e.target.dataset.editform; const name = document.getElementById("editName").value.trim();
     if (!name) return;
-    S.db.doc("meals/" + id).update({ name }).catch(writeErr);
-    S.editing = null; S.nameDraft = null; render();
+    const seen = new Set();
+    const ingredients = document.getElementById("editIngr").value.split(/\n|,/).map(x => x.trim().replace(/\s+/g, " ")).filter(x => x && !seen.has(ingKey(x)) && seen.add(ingKey(x)));
+    S.db.doc("meals/" + id).update({ name, ingredients }).catch(writeErr);
+    S.editing = null; S.nameDraft = null; S.ingDraft = null; render();
   }
   if (e.target.id === "addForm") {
     const name = document.getElementById("newName").value.trim();
