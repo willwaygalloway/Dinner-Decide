@@ -15,17 +15,20 @@
   --accent-soft: #dcefe2;
   --warm: #c2502f;        /* tomato, used sparingly */
   --warm-soft: #f8e1d9;
+  --frost: #2f6f9a;
   --c-pasta: #e7b33a; --c-rice: #7fa8c9; --c-bread: #b98552; --c-potato: #a3a35a; --c-noodles: #cc7a9e; --c-other: #8a958d;
   --display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
   --body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg: #121814; --surface: #1b231e; --fg: #e5ede7; --muted: #9aaa9f; --line: #2c3830;
-  --accent: #5cb87d; --accent-fg: #0d1a12; --accent-soft: #1f3a29; --warm: #ec8a68; --warm-soft: #3a231b; color-scheme: dark } }
+  --accent: #5cb87d; --accent-fg: #0d1a12; --accent-soft: #1f3a29; --warm: #ec8a68; --warm-soft: #3a231b; --frost: #7fb6dc; color-scheme: dark } }
 :root[data-theme="dark"] {
   --bg: #121814; --surface: #1b231e; --fg: #e5ede7; --muted: #9aaa9f; --line: #2c3830;
-  --accent: #5cb87d; --accent-fg: #0d1a12; --accent-soft: #1f3a29; --warm: #ec8a68; --warm-soft: #3a231b; color-scheme: dark }
+  --accent: #5cb87d; --accent-fg: #0d1a12; --accent-soft: #1f3a29; --warm: #ec8a68; --warm-soft: #3a231b; --frost: #7fb6dc; color-scheme: dark }
 
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { min-height: 100%; }
 body { background: var(--bg); color: var(--fg); font: 16px/1.45 var(--body); }
 body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
@@ -97,9 +100,28 @@ input, select { font: inherit; padding: 11px 12px; border-radius: 10px; border: 
 .row { display: flex; gap: 8px; flex-wrap: wrap; }
 .row > * { flex: 1 1 140px; }
 .choice { display: grid; gap: 10px; }
-.manage .meal { cursor: default; }
+.manage { display: grid; gap: 18px; }
 .del { border: 0; background: transparent; color: var(--muted); font-size: 13px; font-weight: 600; padding: 6px 8px; border-radius: 8px; }
 .del.confirm { background: var(--warm); color: #fff; }
+.badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.badge { font-size: 11.5px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.badge.quick { color: var(--accent); border-color: var(--accent); }
+.badge.frz { color: var(--frost); border-color: var(--frost); }
+.badge.frz.empty { color: var(--warm); border-color: var(--warm); }
+.badge.dbl { color: var(--fg); }
+.meal.editor { flex-direction: column; align-items: stretch; gap: 12px; border-color: var(--accent); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { border: 1.5px solid var(--line); background: var(--bg); border-radius: 999px; padding: 8px 14px; font-weight: 600; font-size: 14px; }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.chip-help { font-size: 13px; color: var(--muted); margin: -4px 0 0; }
+.edit-link { font-size: 13px; font-weight: 600; color: var(--accent); white-space: nowrap; }
+.freezer { display: grid; gap: 6px; }
+.frzrow { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px dashed var(--line); }
+.frzrow:last-child { border-bottom: 0; }
+.frzrow .name { flex: 1; min-width: 0; font-weight: 500; }
+.step { width: 40px; height: 40px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--bg); font-size: 20px; font-weight: 600; line-height: 1; }
+.frzrow b { width: 2ch; text-align: center; font-variant-numeric: tabular-nums; font-size: 18px; font-family: var(--display); }
+.frzrow b.zero { color: var(--warm); }
 .muted { color: var(--muted); }
 .center { text-align: center; }
 @media (prefers-reduced-motion: no-preference) { .meal, .btn, nav.tabs button { transition: background .15s, border-color .15s, color .15s; } }
@@ -151,6 +173,8 @@ const S = {
   tab: store.get("tab") || "pick",
   pendingDelete: null,
   editingNames: false,
+  editing: null, nameDraft: null,
+  frzPending: {}, frzTimers: {},
 };
 let unsubWeek = [];
 
@@ -168,6 +192,19 @@ function other(k) { return k === "a" ? "b" : "a"; }
 function myPicks() { if (S.draft) return S.draft; const p = S.picks[S.me]; return new Set((p && p.meals) || []); }
 function isDone(k) { return !!(S.picks[k] && S.picks[k].done); }
 function validIds(arr) { return (arr || []).filter(id => mealById(id)); }
+function freezerCount(m) { return m.id in S.frzPending ? S.frzPending[m.id] : (m.freezer || 0); }
+function badges(m) {
+  const b = [];
+  if (m.quick) b.push(`<span class="badge quick">Quick &amp; easy</span>`);
+  if (m.defrost) { const n = freezerCount(m); b.push(`<span class="badge frz${n ? "" : " empty"}">${n ? n + " in freezer" : "None in freezer"}</span>`); }
+  if (m.doubles) b.push(`<span class="badge dbl">Doubles up</span>`);
+  return b.length ? `<span class="badges">${b.join("")}</span>` : "";
+}
+const FLAGS = [
+  ["quick", "Quick & easy"],
+  ["defrost", "Defrost"],
+  ["doubles", "Doubles up"],
+];
 
 function suggestion(matched) {
   // Spread across carbs: round-robin through carb groups, starting point and in-group order varied per week.
@@ -274,7 +311,7 @@ function viewPick() {
     : `<section><h1>What would you eat this week?</h1><p class="lede">Tick everything you'd be happy with. ${esc(personName(them))} won't see your picks until you've both finished.</p></section>`;
   const body = mealGroups(all, id => {
     const m = mealById(id); const on = picks.has(id);
-    return `<button class="meal" data-pick="${esc(id)}" aria-pressed="${on}" ${done || S.readOnly ? "disabled" : ""}><span class="name">${esc(m.name)}</span><span class="tick">✓</span></button>`;
+    return `<button class="meal" data-pick="${esc(id)}" aria-pressed="${on}" ${done || S.readOnly ? "disabled" : ""}><span class="name">${esc(m.name)}${badges(m)}</span><span class="tick">✓</span></button>`;
   });
   const foot = done
     ? `<div class="row"><button class="btn ghost" id="editPicks">Change my picks</button>${isDone(them) ? `<button class="btn" data-goto="week">See this week</button>` : ""}</div>`
@@ -302,10 +339,10 @@ function viewWeek() {
   for (let i = 0; i < TARGET; i++) {
     const id = final[i]; const m = id && mealById(id);
     slots.push(m
-      ? `<li><span class="num">${i + 1}</span><span class="dot" style="background:${carbColor(m.carb)}"></span><span class="name">${esc(m.name)} <span class="carb">· ${esc(m.carb || "Other")}</span></span><button class="x" data-remove="${esc(id)}" aria-label="Remove ${esc(m.name)}" ${S.readOnly ? "disabled" : ""}>×</button></li>`
+      ? `<li><span class="num">${i + 1}</span><span class="dot" style="background:${carbColor(m.carb)}"></span><span class="name">${esc(m.name)} <span class="carb">· ${esc(m.carb || "Other")}</span>${badges(m)}</span><button class="x" data-remove="${esc(id)}" aria-label="Remove ${esc(m.name)}" ${S.readOnly ? "disabled" : ""}>×</button></li>`
       : `<li><span class="num">${i + 1}</span><span class="name empty-slot">Pick one below</span></li>`);
   }
-  const addBtn = (id, tag) => { const m = mealById(id); return `<button class="meal" data-add="${esc(id)}" aria-pressed="false" ${full || S.readOnly ? "disabled" : ""}><span class="dot" style="background:${carbColor(m.carb)}"></span><span class="name">${esc(m.name)}</span>${tag ? `<span class="tag">${esc(tag)}</span>` : ""}<span class="tick">+</span></button>`; };
+  const addBtn = (id, tag) => { const m = mealById(id); return `<button class="meal" data-add="${esc(id)}" aria-pressed="false" ${full || S.readOnly ? "disabled" : ""}><span class="dot" style="background:${carbColor(m.carb)}"></span><span class="name">${esc(m.name)}${badges(m)}</span>${tag ? `<span class="tag">${esc(tag)}</span>` : ""}<span class="tick">+</span></button>`; };
   const spareMatched = matched.filter(id => !finalSet.has(id));
   const spareOne = onlyOne.filter(id => !finalSet.has(id));
 
@@ -327,12 +364,35 @@ function viewWeek() {
 }
 
 function viewMeals() {
+  const ro = S.readOnly ? "disabled" : "";
   const groups = mealGroups(sortedMeals().map(m => m.id), id => {
-    const m = mealById(id); const conf = S.pendingDelete === id;
-    return `<div class="meal"><span class="name">${esc(m.name)}</span><button class="del ${conf ? "confirm" : ""}" data-del="${esc(id)}" ${S.readOnly ? "disabled" : ""}>${conf ? "Tap to remove" : "Remove"}</button></div>`;
+    const m = mealById(id);
+    if (S.editing !== id) return `<button class="meal" data-edit="${esc(id)}"><span class="name">${esc(m.name)}${badges(m)}</span><span class="edit-link">Edit</span></button>`;
+    const conf = S.pendingDelete === id;
+    const name = S.nameDraft && S.nameDraft.id === id ? S.nameDraft.value : m.name;
+    const carbOpts = carbs().map(c => `<option ${c === m.carb ? "selected" : ""}>${esc(c)}</option>`).join("");
+    return `<form class="meal editor" data-editform="${esc(id)}">
+      <div class="row">
+        <label>Meal<input id="editName" maxlength="60" required value="${esc(name)}"></label>
+        <label>Carb<select id="editCarb" ${ro}>${carbOpts}</select></label>
+      </div>
+      <div class="chips">${FLAGS.map(([k, label]) => `<button type="button" class="chip" data-flag="${k}" aria-pressed="${!!m[k]}" ${ro}>${label}</button>`).join("")}</div>
+      <p class="chip-help">Tap to turn a tag on or off. Defrost meals get a freezer count at the top of this page.</p>
+      <div class="row">
+        <button class="btn small" ${ro}>Save name</button>
+        <button type="button" class="btn ghost small" data-edit="">Close</button>
+        <button type="button" class="del ${conf ? "confirm" : ""}" data-del="${esc(id)}" ${ro}>${conf ? "Tap again to remove" : "Remove meal"}</button>
+      </div>
+    </form>`;
   });
+  const frozen = sortedMeals().filter(m => m.defrost);
+  const freezer = `<section class="card"><h2>In the freezer</h2>${frozen.length
+    ? `<p class="lede">Portions of each defrost meal you have frozen. Tap + when you freeze a batch, − when you use one.</p>
+       <div class="freezer">${frozen.map(m => { const n = freezerCount(m); return `<div class="frzrow"><span class="name">${esc(m.name)}</span><button class="step" data-frz="${esc(m.id)}" data-d="-1" aria-label="One fewer ${esc(m.name)}" ${n <= 0 || S.readOnly ? "disabled" : ""}>−</button><b class="${n ? "" : "zero"}">${n}</b><button class="step" data-frz="${esc(m.id)}" data-d="1" aria-label="One more ${esc(m.name)}" ${ro}>+</button></div>`; }).join("")}</div>`
+    : `<p class="lede">No defrost meals yet. Tap Edit on a meal below and turn on Defrost to track how many you have frozen.</p>`}</section>`;
   const opts = carbs().map(c => `<option>${esc(c)}</option>`).join("");
-  return `<section><h1>Your meals</h1><p class="lede">${(S.meals || []).length} meals you both enjoy, grouped by carb.</p></section>
+  return `<section><h1>Your meals</h1><p class="lede">${(S.meals || []).length} meals you both enjoy, grouped by carb. Tap a meal to edit it or tag it.</p></section>
+    ${freezer}
     <form class="card" id="addForm">
       <h2>Add a meal</h2>
       <div class="row">
@@ -405,6 +465,24 @@ document.addEventListener("click", e => {
     S.plan = { final }; render(); savePlan(final); return;
   }
   if (t.id === "resetPlan") { S.plan = null; render(); S.db.doc("weeks/" + weekId(S.week)).delete().catch(writeErr); return; }
+  if ("edit" in t.dataset) { S.editing = t.dataset.edit || null; S.nameDraft = null; S.pendingDelete = null; render(); return; }
+  if (t.dataset.flag) {
+    const m = mealById(S.editing); if (!m) return;
+    const k = t.dataset.flag; const body = { [k]: !m[k] };
+    if (k === "defrost" && !m.defrost && m.freezer == null) body.freezer = 0;
+    S.db.doc("meals/" + m.id).update(body).catch(writeErr);
+    return;
+  }
+  if (t.dataset.frz) {
+    const m = mealById(t.dataset.frz); if (!m) return;
+    const n = Math.max(0, freezerCount(m) + Number(t.dataset.d));
+    S.frzPending[m.id] = n; render();
+    clearTimeout(S.frzTimers[m.id]);
+    S.frzTimers[m.id] = setTimeout(() => {
+      S.db.doc("meals/" + m.id).update({ freezer: n }).then(() => { if (S.frzPending[m.id] === n) { delete S.frzPending[m.id]; render(); } }).catch(writeErr);
+    }, 600);
+    return;
+  }
   if (t.dataset.del) {
     const id = t.dataset.del;
     if (S.pendingDelete === id) { S.pendingDelete = null; S.db.doc("meals/" + id).delete().catch(writeErr); }
@@ -415,6 +493,10 @@ document.addEventListener("click", e => {
 
 document.addEventListener("change", e => {
   if (e.target.id === "newCarb") document.getElementById("newCarbWrap").hidden = e.target.value !== "__new";
+  if (e.target.id === "editCarb" && S.editing) S.db.doc("meals/" + S.editing).update({ carb: e.target.value }).catch(writeErr);
+});
+document.addEventListener("input", e => {
+  if (e.target.id === "editName" && S.editing) S.nameDraft = { id: S.editing, value: e.target.value };
 });
 
 document.addEventListener("submit", e => {
@@ -424,6 +506,12 @@ document.addEventListener("submit", e => {
     if (!a || !b) return;
     S.people = { a, b }; S.editingNames = false; render();
     S.db.doc("app/settings").set({ people: { a, b } }).catch(writeErr);
+  }
+  if (e.target.dataset.editform) {
+    const id = e.target.dataset.editform; const name = document.getElementById("editName").value.trim();
+    if (!name) return;
+    S.db.doc("meals/" + id).update({ name }).catch(writeErr);
+    S.editing = null; S.nameDraft = null; render();
   }
   if (e.target.id === "addForm") {
     const name = document.getElementById("newName").value.trim();
