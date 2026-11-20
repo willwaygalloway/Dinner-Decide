@@ -597,9 +597,11 @@ function viewShop() {
   const stapleNeed = staples.filter(i => !isCrossed(i.key)).length;
   return `<section><h1>Shopping list</h1><p class="lede">For this week's ${final.length} dinners. Tap anything you already have or have bought to cross it off. It updates on both phones.</p></section>
     <div class="row shop-actions">
-      <button class="btn small" id="copyList" ${need.length ? "" : "disabled"}>${S.copied ? "Copied" : "Copy list"}</button>
+      <button class="btn small" id="copyList" ${need.length ? "" : "disabled"}>${S.copied === "list" ? "Copied" : "Copy list"}</button>
+      <button class="btn ghost small" id="copyWaitrose" ${need.length ? "" : "disabled"}>${S.copied === "waitrose" ? "Copied" : "Copy for Waitrose"}</button>
       <button class="btn ghost small" id="stapleMode">${S.stapleMode ? "Finish editing staples" : "Edit staples"}</button>
     </div>
+    ${S.copied === "waitrose" ? `<p class="note frost">Copied. On your computer, open Waitrose in Chrome, make sure you're logged in, open Claude in Chrome and paste. Check the basket before you pay.</p>` : ""}
     ${S.stapleMode ? `<p class="note">Staples are things you usually have in, like oil, spices and stock. They move into "Check the cupboard" so the main list stays short.</p>` : ""}
     <section class="group"><h3>To get<span class="count">${need.length}</span></h3>
       <div class="list">${need.length ? need.map(row).join("") : `<p class="muted">Nothing left to get.</p>`}</div>
@@ -787,11 +789,14 @@ document.addEventListener("click", e => {
     (S.staplesExists ? S.db.doc("app/staples").update(patch) : S.db.doc("app/staples").set({ items: S.staples }).then(() => { S.staplesExists = true; })).catch(writeErr);
     return;
   }
-  if (t.id === "copyList") {
+  if (t.id === "copyList" || t.id === "copyWaitrose") {
     const { items, extras } = shoppingItems(weekFinal() || []);
     const lines = items.filter(i => !isStaple(i.key)).concat(extras).filter(i => !isCrossed(i.key)).map(i => "- " + i.name);
-    const text = "Shopping list, " + weekLabel(S.week).replace(" · planning now", "") + "\n" + lines.join("\n");
-    const done = () => { S.copied = true; render(); setTimeout(() => { S.copied = false; render(); }, 2000); };
+    const kind = t.id === "copyWaitrose" ? "waitrose" : "list";
+    const text = kind === "waitrose"
+      ? "Please add these items to my Waitrose basket on waitrose.com (I'm logged in). For each one, search for it and add one of the most standard everyday version, in a normal household size. Don't check out or change delivery details. When you're done, tell me anything you couldn't find or weren't sure about.\n\n" + lines.join("\n")
+      : "Shopping list, " + weekLabel(S.week) + "\n" + lines.join("\n");
+    const done = () => { S.copied = kind; render(); setTimeout(() => { if (S.copied === kind) { S.copied = false; render(); } }, kind === "waitrose" ? 12000 : 2000); };
     try { navigator.clipboard.writeText(text).then(done, () => fallbackCopy(text, done)); } catch { fallbackCopy(text, done); }
     return;
   }
