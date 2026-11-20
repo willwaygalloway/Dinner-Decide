@@ -38,7 +38,31 @@ button { font: inherit; color: inherit; cursor: pointer; }
 button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 
 header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); }
-header.top .wrap { display: flex; align-items: center; gap: 8px; padding-block: 12px; }
+header.top .wrap { display: grid; gap: 10px; padding-block: 10px; }
+.toprow { display: flex; align-items: center; gap: 8px; }
+.weekrow { display: flex; align-items: center; gap: 8px; }
+.seg { display: flex; flex: 1; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+.seg button { flex: 1; border: 0; background: transparent; border-radius: 7px; padding: 7px 6px; font-size: 14px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.newweek { border: 0; background: var(--warm); color: #fff; border-radius: 10px; padding: 10px 14px; font-weight: 700; font-size: 14px; white-space: nowrap; }
+.outgrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.outgrid button { border: 1.5px solid var(--line); background: var(--surface); border-radius: 14px; padding: 16px 0 12px; font-family: var(--display); font-size: 26px; font-weight: 800; display: grid; gap: 2px; }
+.outgrid button small { font-family: var(--body); font-size: 11.5px; font-weight: 600; color: var(--muted); }
+.outgrid button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.weekinfo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; color: var(--muted); }
+.linkbtn { border: 0; background: transparent; color: var(--accent); font-weight: 600; padding: 4px 2px; font-size: 14px; text-decoration: underline; text-underline-offset: 3px; }
+.modes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.mode { border: 1.5px solid var(--line); background: var(--bg); border-radius: 999px; padding: 5px 11px; font-size: 13px; font-weight: 600; color: var(--fg); }
+.mode[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.mode:disabled { opacity: 0.45; }
+.dinners li.lo { color: var(--muted); }
+.dinners li.lo .name { font-style: italic; }
+.tour { display: grid; gap: 14px; }
+.tour .stepno { font-size: 13px; font-weight: 700; color: var(--accent); letter-spacing: 0.06em; text-transform: uppercase; }
+.tour .pic { font-family: var(--display); font-size: 44px; line-height: 1; }
+.dots { display: flex; gap: 6px; justify-content: center; }
+.dots span { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+.dots span.on { background: var(--accent); }
 .brand { font-family: var(--display); font-weight: 800; font-size: 20px; flex: 1; min-width: 0; }
 .brand small { display: block; font-family: var(--body); font-weight: 500; font-size: 13px; color: var(--muted); letter-spacing: 0; }
 .iconbtn { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; width: 38px; height: 38px; font-size: 18px; line-height: 1; }
@@ -148,10 +172,17 @@ details.group[open] summary h3::after { content: "Hide"; }
 </style>
 
 <header class="top"><div class="wrap">
-  <button class="iconbtn" id="prevWeek" aria-label="Previous week">‹</button>
-  <div class="brand">Dinner Decide<small id="weekLabel">This week</small></div>
-  <button class="iconbtn" id="nextWeek" aria-label="Next week">›</button>
-  <button class="whoami" id="whoBtn" hidden></button>
+  <div class="toprow">
+    <div class="brand">Dinner Decide<small id="weekLabel">This week</small></div>
+    <button class="iconbtn" id="helpBtn" aria-label="How it works">?</button>
+    <button class="whoami" id="whoBtn" hidden></button>
+  </div>
+  <div class="weekrow" id="weekRow" hidden>
+    <div class="seg" role="group" aria-label="Which week">
+      <button id="wk0">This week</button><button id="wk1">Next week</button>
+    </div>
+    <button class="newweek" id="newWeek">+ New week</button>
+  </div>
 </div></header>
 
 <main class="wrap" id="app" aria-live="polite">
@@ -160,13 +191,32 @@ details.group[open] summary h3::after { content: "Hide"; }
 
 <nav class="tabs" id="tabs" hidden><div class="wrap">
   <button data-tab="pick">Pick</button>
-  <button data-tab="week">This week</button>
+  <button data-tab="week">Dinners</button>
   <button data-tab="shop">Shop</button>
   <button data-tab="meals">Meals</button>
 </div></nav>
 
 <script>
-const TARGET = 6;
+const BASE_DINNERS = 6; // 7 nights minus the night Holly's parents bring dinner
+const STARTER_MEALS = [
+  ["Spaghetti Bolognese", "Pasta", ["spaghetti", "beef mince", "onion", "garlic", "carrot", "chopped tomatoes", "tomato puree", "parmesan"]],
+  ["Macaroni Cheese", "Pasta", ["macaroni", "cheddar", "milk", "butter", "plain flour"]],
+  ["Chicken Curry", "Rice", ["rice", "chicken thighs", "onion", "garlic", "ginger", "curry paste", "coconut milk"]],
+  ["Chilli con Carne", "Rice", ["rice", "beef mince", "kidney beans", "onion", "red pepper", "chopped tomatoes", "chilli powder"]],
+  ["Fajitas", "Bread", ["tortilla wraps", "chicken breast", "peppers", "onion", "fajita seasoning", "soured cream", "cheddar"]],
+  ["Homemade Pizza", "Bread", ["pizza bases", "passata", "mozzarella", "toppings"]],
+  ["Sausage and Mash", "Potato", ["sausages", "potatoes", "butter", "milk", "gravy granules", "peas"]],
+  ["Fish Pie", "Potato", ["fish pie mix", "potatoes", "milk", "butter", "plain flour", "peas"]],
+  ["Roast Chicken Dinner", "Potato", ["whole chicken", "potatoes", "carrots", "broccoli", "gravy granules"]],
+  ["Stir Fry", "Noodles", ["noodles", "chicken breast", "peppers", "beansprouts", "spring onions", "soy sauce"]],
+];
+const TOUR = [
+  ["1", "Each of you picks", "Every week, each of you ticks the meals you'd happily eat. It's quick: tap, tap, Done. You can't see each other's picks until you've both finished."],
+  ["2", "The app matches", "Meals you both picked become the week's dinners, spread across the carbs. Fewer than you need? It shows the ones only one of you picked so you can agree the rest."],
+  ["3", "Cook extra, freeze, repeat", "On any dinner, tap Leftovers or Freeze extra. Leftovers fill a later night, frozen portions are counted for another week."],
+  ["4", "The shopping list writes itself", "The Shop tab lists everything for the week's dinners. Cross off what's already in the cupboard, copy the rest."],
+  ["5", "Start each week with + New week", "Tap + New week, say how many evenings you're out, then pick. That's the whole routine."],
+];
 const CARB_COLORS = { pasta: "var(--c-pasta)", rice: "var(--c-rice)", bread: "var(--c-bread)", potato: "var(--c-potato)", noodles: "var(--c-noodles)" };
 const store = {
   get(k) { try { return localStorage.getItem("dd:" + k); } catch { return null; } },
@@ -174,12 +224,17 @@ const store = {
 };
 
 function mondayOf(d) { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); const dow = (x.getDay() + 6) % 7; x.setDate(x.getDate() - dow); return x; }
-function defaultWeek() { const t = new Date(); const m = mondayOf(t); if (t.getDay() === 6 || t.getDay() === 0) m.setDate(m.getDate() + 7); return m; }
-function weekId(m) { return m.getFullYear() + "-" + String(m.getMonth() + 1).padStart(2, "0") + "-" + String(m.getDate()).padStart(2, "0"); }
-function weekLabel(m) {
-  const cur = weekId(defaultWeek()) === weekId(m);
-  return (cur ? "Week of " : "Week of ") + m.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }) + (cur ? " · planning now" : "");
+function thisWeek() { return mondayOf(new Date()); }
+function nextWeek() { const m = thisWeek(); m.setDate(m.getDate() + 7); return m; }
+function defaultWeek() {
+  const saved = store.get("week");
+  if (saved === weekId(thisWeek())) return thisWeek();
+  if (saved === weekId(nextWeek())) return nextWeek();
+  const d = new Date().getDay(); return d === 6 || d === 0 ? nextWeek() : thisWeek();
 }
+function isNextWeek() { return weekId(S.week) === weekId(nextWeek()); }
+function weekId(m) { return m.getFullYear() + "-" + String(m.getMonth() + 1).padStart(2, "0") + "-" + String(m.getDate()).padStart(2, "0"); }
+function weekLabel(m) { return "Week of " + m.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }); }
 function slug(s) { return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "meal"; }
 function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function hash(str) { let h = 2166136261; for (const c of str) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
@@ -194,6 +249,7 @@ const S = {
   tab: store.get("tab") || "pick",
   pendingDelete: null,
   editingNames: false,
+  asking: null, tour: null, starterBusy: false,
   editing: null, nameDraft: null, ingDraft: null,
   frzPending: {}, frzTimers: {},
   shop: {}, shopExists: false, staples: {}, staplesExists: false, stapleMode: false, copied: false,
@@ -213,6 +269,10 @@ function personName(k) { return (S.people && S.people[k]) || (k === "a" ? "Perso
 function other(k) { return k === "a" ? "b" : "a"; }
 function myPicks() { if (S.draft) return S.draft; const p = S.picks[S.me]; return new Set((p && p.meals) || []); }
 function isDone(k) { return !!(S.picks[k] && S.picks[k].done); }
+function target() { const t = S.plan && S.plan.target; return typeof t === "number" ? t : BASE_DINNERS; }
+function eveningsOut() { return BASE_DINNERS - target(); }
+function howOf(id) { const h = S.plan && S.plan.how && S.plan.how[id]; if (h) return h; const m = mealById(id); return m && m.defrost ? "freezer" : "fresh"; }
+function nightsUsed(final, how) { return final.reduce((n, id) => n + ((how ? how[id] : howOf(id)) === "leftovers" ? 2 : 1), 0); }
 function validIds(arr) { return (arr || []).filter(id => mealById(id)); }
 function freezerCount(m) { return m.id in S.frzPending ? S.frzPending[m.id] : (m.freezer || 0); }
 function badges(m) {
@@ -237,7 +297,8 @@ function suggestion(matched) {
   const start = hash(wk) % groups.length;
   const rot = groups.slice(start).concat(groups.slice(0, start));
   const out = [];
-  while (out.length < TARGET && rot.some(g => g.length)) for (const g of rot) { if (g.length && out.length < TARGET) out.push(g.shift()); }
+  const n = target();
+  while (out.length < n && rot.some(g => g.length)) for (const g of rot) { if (g.length && out.length < n) out.push(g.shift()); }
   return out;
 }
 
@@ -299,16 +360,28 @@ function adjustFreezer(m, delta) {
   }, 600);
 }
 function storedFinal() { return S.plan && Array.isArray(S.plan.final) ? S.plan.final : null; }
-function savePlan(final) {
-  // Defrost meals use a freezer portion while they're in the plan; taking one out puts it back.
-  const tally = arr => arr.reduce((o, id) => (o[id] = (o[id] || 0) + 1, o), {});
-  const before = tally(storedFinal() || []), after = tally(final);
+function freezerEffect(final, howFor) {
+  // "From the freezer" uses a portion; "Freeze extra" adds one.
+  const out = {};
+  for (const id of final) { const h = howFor(id); if (h === "freezer") out[id] = (out[id] || 0) - 1; if (h === "freeze") out[id] = (out[id] || 0) + 1; }
+  return out;
+}
+function savePlan(final, howPatch) {
+  const oldFinal = storedFinal() || [];
+  const before = freezerEffect(oldFinal, howOf);
+  const how = {};
+  for (const id of final) how[id] = (howPatch && howPatch[id]) || howOf(id);
+  const after = freezerEffect(final, id => how[id]);
   for (const id of new Set([...Object.keys(before), ...Object.keys(after)])) {
     const m = mealById(id); const d = (after[id] || 0) - (before[id] || 0);
-    if (m && m.defrost && d) adjustFreezer(m, -d);
+    if (m && d) adjustFreezer(m, d);
   }
-  S.plan = Object.assign({}, S.plan, { final });
-  S.db.doc("weeks/" + weekId(S.week)).set({ final, updatedAt: Date.now() }).catch(writeErr);
+  writeWeek({ final, how });
+}
+function writeWeek(patch) {
+  S.plan = Object.assign({}, S.plan, patch, { updatedAt: Date.now() });
+  S.db.doc("weeks/" + weekId(S.week)).set(S.plan).catch(writeErr);
+  render();
 }
 function matchedFrom(aMeals, bMeals) {
   const A = new Set(aMeals || []), B = new Set(bMeals || []);
@@ -336,13 +409,15 @@ function shoppingItems(final) {
   const items = new Map(); const missing = []; const frozen = [];
   for (const id of final) {
     const m = mealById(id); if (!m) continue;
-    if (m.defrost) { frozen.push(m); continue; }
+    const how = howOf(id);
+    if (how === "freezer") { frozen.push(m); continue; }
+    const label = how === "leftovers" || how === "freeze" ? m.name + " (make extra)" : m.name;
     const ings = (m.ingredients || []).filter(s => s && s.trim());
     if (!ings.length) { missing.push(m); continue; }
     for (const raw of ings) {
       const k = ingKey(raw); if (!k) continue;
       if (!items.has(k)) items.set(k, { key: k, name: niceName(raw), meals: [] });
-      items.get(k).meals.push(m.name);
+      items.get(k).meals.push(label);
     }
   }
   const extras = Object.entries((S.shop && S.shop.extras) || {}).filter(([, v]) => v).map(([k, v]) => ({ key: "x-" + k, extraKey: k, name: niceName(v), meals: [] }));
@@ -391,27 +466,66 @@ function viewPick() {
   const all = sortedMeals().map(m => m.id);
   if (!all.length) return `<section class="card"><h2>No meals yet</h2><p class="lede">Add your meals on the Meals tab, then come back to pick.</p></section>`;
   const head = done
-    ? `<section><h1>Picks sent</h1><p class="lede">${isDone(them) ? `${esc(personName(them))} has finished too. See what you both picked on This week.` : `Waiting for ${esc(personName(them))} to finish. Their picks stay hidden until then.`}</p></section>`
-    : `<section><h1>What would you eat this week?</h1><p class="lede">Tick everything you'd be happy with. ${esc(personName(them))} won't see your picks until you've both finished.</p></section>`;
+    ? `<section><h1>Picks sent</h1><p class="lede">${isDone(them) ? `${esc(personName(them))} has finished too. See your dinners on the Dinners tab.` : `Waiting for ${esc(personName(them))} to finish. Their picks stay hidden until then.`}</p></section>`
+    : `<section><h1>What would you eat ${isNextWeek() ? "next week" : "this week"}?</h1><p class="lede">Tick everything you'd be happy with. ${esc(personName(them))} won't see your picks until you've both finished.</p></section>`;
   const body = mealGroups(all, id => {
     const m = mealById(id); const on = picks.has(id);
     return `<button class="meal" data-pick="${esc(id)}" aria-pressed="${on}" ${done || S.readOnly ? "disabled" : ""}><span class="name">${esc(m.name)}${badges(m)}</span><span class="tick">✓</span></button>`;
   });
   const foot = done
-    ? `<div class="row"><button class="btn ghost" id="editPicks">Change my picks</button>${isDone(them) ? `<button class="btn" data-goto="week">See this week</button>` : ""}</div>`
+    ? `<div class="row"><button class="btn ghost" id="editPicks">Change my picks</button>${isDone(them) ? `<button class="btn" data-goto="week">See the dinners</button>` : ""}</div>`
     : `<div class="sticky-done"><button class="btn" id="donePicks" ${S.readOnly ? "disabled" : ""}>Done · ${picks.size} picked</button></div>`;
-  return head + body + foot;
+  return head + weekInfo() + body + foot;
+}
+
+function weekInfo() {
+  const out = eveningsOut();
+  return `<div class="weekinfo"><span>${out ? `Out ${out} evening${out > 1 ? "s" : ""}` : "In every evening"} · <b>${target()} dinners</b> to plan</span><button class="linkbtn" id="changeOut">Change</button></div>`;
+}
+
+function viewOut() {
+  const w = S.asking; const cur = S.askingCurrent;
+  const btns = [0, 1, 2, 3, 4].map(n => `<button data-out="${n}" aria-pressed="${cur === n}"><span>${n}</span><small>${BASE_DINNERS - n} dinners</small></button>`).join("");
+  return `<section class="card">
+    <p class="muted" style="margin:0">${esc(weekLabel(w))}</p>
+    <h1>How many evenings are you out ${weekId(w) === weekId(nextWeek()) ? "next week" : "this week"}?</h1>
+    <p class="lede">Don't count ${esc(personName("b"))}'s parents' night, it's already left out.</p>
+    <div class="outgrid">${btns}</div>
+    <button class="btn ghost small" id="cancelOut">Cancel</button>
+  </section>`;
+}
+
+function viewTour() {
+  const i = S.tour; const [n, title, text] = TOUR[i]; const last = i === TOUR.length - 1;
+  return `<section class="card tour">
+    <span class="stepno">Step ${n} of ${TOUR.length}</span>
+    <h1>${esc(title)}</h1>
+    <p class="lede">${esc(text)}</p>
+    <div class="dots">${TOUR.map((_, j) => `<span class="${j === i ? "on" : ""}"></span>`).join("")}</div>
+    <button class="btn" id="tourNext">${last ? "Got it" : "Next"}</button>
+    ${last ? "" : `<button class="btn ghost small" id="tourSkip">Skip</button>`}
+  </section>`;
+}
+
+function viewStarter() {
+  return `<section class="card">
+    <h1>Add your meals</h1>
+    <p class="lede">Start with ten everyday meals (spag bol, curry, pizza and so on) that you can edit or delete, or start with an empty list and add your own.</p>
+    <button class="btn" id="starterYes" ${S.starterBusy || S.readOnly ? "disabled" : ""}>${S.starterBusy ? "Adding…" : "Start with 10 example meals"}</button>
+    <button class="btn ghost" id="starterNo">Start with an empty list</button>
+  </section>`;
 }
 
 function viewWeek() {
-  const me = S.me, them = other(me);
+  const me = S.me;
   if (!S.weekLoaded) return `<p class="muted center">Loading this week…</p>`;
   const status = `<div class="status">${["a", "b"].map(k => `<div class="person"><b>${esc(personName(k))}${k === me ? " (you)" : ""}</b><span class="pill ${isDone(k) ? "done" : "wait"}">${isDone(k) ? "Finished picking" : "Still picking"}</span></div>`).join("")}</div>`;
-  if (!isDone("a") || !isDone("b")) {
-    return `<section><h1>Not decided yet</h1><p class="lede">Once you've both tapped Done on the Pick tab, your matches show up here.</p></section>${status}
+  if (!storedFinal() && (!isDone("a") || !isDone("b"))) {
+    return `<section><h1>Not decided yet</h1><p class="lede">Once you've both tapped Done on the Pick tab, your dinners show up here.</p></section>${weekInfo()}${status}
       ${!isDone(me) ? `<button class="btn" data-goto="pick">Make my picks</button>` : ""}`;
   }
-  const A = new Set(validIds(S.picks.a.meals)), B = new Set(validIds(S.picks.b.meals));
+  const T = target();
+  const A = new Set(validIds((S.picks.a || {}).meals)), B = new Set(validIds((S.picks.b || {}).meals));
   const order = sortedMeals().map(m => m.id);
   const matched = order.filter(id => A.has(id) && B.has(id));
   const onlyOne = order.filter(id => A.has(id) !== B.has(id));
@@ -419,33 +533,46 @@ function viewWeek() {
   const sugg = suggestion(matched);
   const isCustom = storedFinal() && (final.length !== sugg.length || final.some((id, i) => id !== sugg[i]));
   const finalSet = new Set(final);
-  const full = final.length >= TARGET;
+  const used = nightsUsed(final);
+  const full = used >= T;
+  const ro = S.readOnly ? "disabled" : "";
 
-  const slots = [];
-  for (let i = 0; i < TARGET; i++) {
-    const id = final[i]; const m = id && mealById(id);
-    slots.push(m
-      ? `<li><span class="num">${i + 1}</span><span class="dot" style="background:${carbColor(m.carb)}"></span><span class="name">${esc(m.name)} <span class="carb">· ${esc(m.carb || "Other")}</span>${badges(m)}</span><button class="x" data-remove="${esc(id)}" aria-label="Remove ${esc(m.name)}" ${S.readOnly ? "disabled" : ""}>×</button></li>`
-      : `<li><span class="num">${i + 1}</span><span class="name empty-slot">Pick one below</span></li>`);
+  const rows = []; let n = 0;
+  for (const id of final) {
+    const m = mealById(id); const how = howOf(id); const frz = freezerCount(m);
+    const modeBtn = (key, label, extraDisabled) => `<button class="mode" data-mode="${key}" data-meal="${esc(id)}" aria-pressed="${how === key}" ${ro} ${extraDisabled && how !== key ? "disabled" : ""}>${label}</button>`;
+    const modes = [
+      modeBtn("leftovers", "Leftovers", full),
+      modeBtn("freeze", "Freeze extra"),
+      (frz > 0 || how === "freezer") ? modeBtn("freezer", `From freezer${how === "freezer" ? "" : ` (${frz})`}`) : "",
+    ].join("");
+    const note = how === "leftovers" ? "Make extra for another night" : how === "freeze" ? "Make extra, 1 portion goes in the freezer" : how === "freezer" ? "Take it out the night before" : "";
+    rows.push(`<li><span class="num">${++n}</span><span class="dot" style="background:${carbColor(m.carb)}"></span><span class="name">${esc(m.name)} <span class="carb">· ${esc(m.carb || "Other")}${note ? " · " + note : ""}</span>${badges(m)}<span class="modes">${modes}</span></span><button class="x" data-remove="${esc(id)}" aria-label="Remove ${esc(m.name)}" ${ro}>×</button></li>`);
+    if (how === "leftovers") rows.push(`<li class="lo"><span class="num">${++n}</span><span class="dot" style="background:${carbColor(m.carb)}"></span><span class="name">Leftovers: ${esc(m.name)}</span></li>`);
   }
+  while (n < T) rows.push(`<li><span class="num">${++n}</span><span class="name empty-slot">Pick one below</span></li>`);
+
   const addBtn = (id, tag) => { const m = mealById(id); return `<button class="meal" data-add="${esc(id)}" aria-pressed="false" ${full || S.readOnly ? "disabled" : ""}><span class="dot" style="background:${carbColor(m.carb)}"></span><span class="name">${esc(m.name)}${badges(m)}</span>${tag ? `<span class="tag">${esc(tag)}</span>` : ""}<span class="tick">+</span></button>`; };
   const spareMatched = matched.filter(id => !finalSet.has(id));
   const spareOne = onlyOne.filter(id => !finalSet.has(id));
+  const others = order.filter(id => !finalSet.has(id) && !A.has(id) && !B.has(id));
 
   let intro;
-  if (matched.length >= TARGET) intro = `You both picked ${matched.length} of the same meals. Here's a mix of ${TARGET} across the carbs. Remove one to swap in another.`;
-  else if (matched.length) intro = `You both picked ${matched.length}. Choose ${TARGET - matched.length} more together from the meals only one of you picked.`;
-  else intro = `None of your picks matched this time. Choose ${TARGET} together from the lists below.`;
+  if (used > T) intro = `That's ${used} nights but you only need ${T}. Remove one.`;
+  else if (full) intro = `All ${T} nights sorted. Tap × to swap one, or Leftovers / Freeze extra to cook more.`;
+  else if (matched.length && final.length) intro = `${T - used} more to choose. Pick from the meals only one of you picked, or use Leftovers to cover a night.`;
+  else intro = `None of your picks matched. Choose ${T} together from the lists below.`;
 
-  return `<section><h1>This week's dinners</h1><p class="lede">${intro}</p></section>
+  return `<section><h1>${isNextWeek() ? "Next week's" : "This week's"} dinners</h1><p class="lede">${intro}</p></section>
+    ${weekInfo()}
     <section class="plan">
-      <div class="plan-head"><h2>Dinners</h2><span class="tally ${full ? "full" : ""}">${Math.min(final.length, TARGET)} / ${TARGET}</span></div>
-      <ol class="dinners">${slots.join("")}</ol>
-      ${isCustom ? `<button class="btn ghost small" id="resetPlan" ${S.readOnly ? "disabled" : ""}>Go back to the suggested mix</button>` : ""}
+      <div class="plan-head"><h2>Dinners</h2><span class="tally ${used === T ? "full" : ""}">${used} / ${T}</span></div>
+      <ol class="dinners">${rows.join("")}</ol>
+      ${isCustom && (isDone("a") && isDone("b")) ? `<button class="btn ghost small" id="resetPlan" ${ro}>Go back to the suggested mix</button>` : ""}
     </section>
     ${spareMatched.length ? `<section class="group"><h3>Also picked by both of you<span class="count">${spareMatched.length}</span></h3><div class="list">${spareMatched.map(id => addBtn(id)).join("")}</div></section>` : ""}
     ${spareOne.length ? `<section class="group"><h3>Picked by one of you<span class="count">${spareOne.length}</span></h3><div class="list">${spareOne.map(id => addBtn(id, A.has(id) ? personName("a") : personName("b"))).join("")}</div></section>` : ""}
-    ${full && (spareMatched.length || spareOne.length) ? `<p class="muted center">All ${TARGET} dinners chosen. Remove one to swap.</p>` : ""}
+    ${!full && others.length ? `<details class="group"><summary><h3>Everything else<span class="count">${others.length}</span></h3></summary><div class="list">${others.map(id => addBtn(id)).join("")}</div></details>` : ""}
     ${status}`;
 }
 
@@ -547,9 +674,15 @@ function render() {
   const ro = S.readOnly ? `<p class="note">You can look but not change anything. Ask whoever shared this to invite you by email as an Editor, and to turn off any public link.</p>` : "";
   const named = S.people.a && S.people.b;
   if (!named || !S.me || !S.people[S.me] || S.editingNames) {
-    app.innerHTML = ro + viewSetup(); tabs.hidden = true; who.hidden = true; return;
+    app.innerHTML = ro + viewSetup(); tabs.hidden = true; who.hidden = true; document.getElementById("weekRow").hidden = true; return;
   }
   who.hidden = false; who.textContent = personName(S.me);
+  const weekRow = document.getElementById("weekRow");
+  const special = S.tour != null ? viewTour() : (!S.meals.length && !store.get("blank")) ? viewStarter() : S.asking ? viewOut() : null;
+  if (special) { app.innerHTML = ro + special; tabs.hidden = true; weekRow.hidden = true; window.scrollTo(0, 0); return; }
+  weekRow.hidden = false;
+  document.getElementById("wk0").setAttribute("aria-pressed", String(!isNextWeek()));
+  document.getElementById("wk1").setAttribute("aria-pressed", String(isNextWeek()));
   tabs.hidden = false;
   tabs.querySelectorAll("button").forEach(b => b.setAttribute("aria-current", b.dataset.tab === S.tab ? "page" : "false"));
   const focusId = document.activeElement && document.activeElement.id;
@@ -564,18 +697,67 @@ function render() {
   window.scrollTo(0, scrollY);
 }
 
+function carbsOrder(carb) { const i = ["Pasta", "Rice", "Bread", "Potato", "Noodles"].indexOf(carb); return i < 0 ? 6 : i + 1; }
+function goWeek(w) {
+  if (weekId(w) === weekId(S.week)) return;
+  if (S.saveTimer) savePicks(false);
+  S.week = w; store.set("week", weekId(w)); subscribeWeek(); render(); window.scrollTo(0, 0);
+}
+async function startNewWeek() {
+  // Plan this week if nothing's been started and it's early in the week; otherwise next week.
+  let w = nextWeek();
+  try {
+    const d = new Date().getDay();
+    if (d >= 1 && d <= 4) { const snap = await S.db.doc("weeks/" + weekId(thisWeek())).get(); if (!snap.exists) w = thisWeek(); }
+    const snap = await S.db.doc("weeks/" + weekId(w)).get();
+    const t = snap.exists && snap.data().target;
+    S.askingCurrent = typeof t === "number" ? BASE_DINNERS - t : null;
+  } catch { S.askingCurrent = null; }
+  S.asking = w; render();
+}
+async function setEveningsOut(n) {
+  const w = S.asking; S.asking = null;
+  const ref = S.db.doc("weeks/" + weekId(w));
+  try {
+    const snap = await ref.get();
+    await (snap.exists ? ref.update({ target: BASE_DINNERS - n }) : ref.set({ target: BASE_DINNERS - n, updatedAt: Date.now() }));
+  } catch (e) { writeErr(e); }
+  if (weekId(w) !== weekId(S.week)) goWeek(w);
+  S.plan = Object.assign({}, S.plan, { target: BASE_DINNERS - n });
+  S.tab = isDone(S.me) ? "week" : "pick"; store.set("tab", S.tab);
+  render(); window.scrollTo(0, 0);
+}
+
 // ---------- events ----------
 document.addEventListener("click", e => {
   const t = e.target.closest("button"); if (!t) return;
   if (t.dataset.tab || t.dataset.goto) { S.tab = t.dataset.tab || t.dataset.goto; store.set("tab", S.tab); S.pendingDelete = null; render(); window.scrollTo(0, 0); return; }
-  if (t.dataset.me) { S.me = t.dataset.me; store.set("me", S.me); S.tab = "pick"; render(); return; }
+  if (t.dataset.me) { S.me = t.dataset.me; store.set("me", S.me); S.tab = "pick"; if (!store.get("tour")) S.tour = 0; render(); return; }
+  if (t.id === "helpBtn") { if (S.me) { S.tour = 0; render(); } return; }
+  if (t.id === "tourNext" || t.id === "tourSkip") {
+    if (t.id === "tourNext" && S.tour < TOUR.length - 1) S.tour++; else { S.tour = null; store.set("tour", "1"); }
+    render(); return;
+  }
+  if (t.id === "starterYes") {
+    S.starterBusy = true; render();
+    Promise.all(STARTER_MEALS.map(([name, carb, ingredients], i) => S.db.doc("meals/" + slug(name)).set({ name, carb, ingredients, order: 100 * (carbsOrder(carb)) + i })))
+      .catch(writeErr).finally(() => { S.starterBusy = false; S.tab = "meals"; render(); });
+    return;
+  }
+  if (t.id === "starterNo") { store.set("blank", "1"); S.tab = "meals"; render(); return; }
+  if (t.id === "wk0" || t.id === "wk1") { goWeek(t.id === "wk0" ? thisWeek() : nextWeek()); return; }
+  if (t.id === "newWeek") { startNewWeek(); return; }
+  if (t.id === "changeOut") { S.asking = new Date(S.week); S.askingCurrent = eveningsOut(); render(); return; }
+  if (t.id === "cancelOut") { S.asking = null; render(); return; }
+  if (t.dataset.out != null) { setEveningsOut(Number(t.dataset.out)); return; }
+  if (t.dataset.mode) {
+    const id = t.dataset.meal; const cur = howOf(id); const key = t.dataset.mode;
+    const final = weekFinal() || []; if (!final.includes(id)) return;
+    if (key === "leftovers" && cur !== "leftovers" && nightsUsed(final) >= target()) return;
+    savePlan(final, { [id]: cur === key ? "fresh" : key }); return;
+  }
   if (t.id === "renameBtn") { S.editingNames = true; render(); return; }
   if (t.id === "whoBtn") { S.me = null; store.set("me", null); S.draft = null; render(); return; }
-  if (t.id === "prevWeek" || t.id === "nextWeek") {
-    if (S.saveTimer) savePicks(false);
-    S.week = new Date(S.week); S.week.setDate(S.week.getDate() + (t.id === "prevWeek" ? -7 : 7));
-    subscribeWeek(); render(); return;
-  }
   if (t.dataset.pick) {
     const set = new Set(myPicks()); const id = t.dataset.pick;
     set.has(id) ? set.delete(id) : set.add(id);
@@ -592,7 +774,7 @@ document.addEventListener("click", e => {
   if (t.dataset.remove || t.dataset.add) {
     let final = weekFinal() || [];
     if (t.dataset.remove) final = final.filter(id => id !== t.dataset.remove);
-    else if (final.length < TARGET && !final.includes(t.dataset.add)) final = final.concat(t.dataset.add);
+    else if (nightsUsed(final) < target() && !final.includes(t.dataset.add)) final = final.concat(t.dataset.add);
     savePlan(final); render(); return;
   }
   if (t.id === "resetPlan") { savePlan(suggestion(matchedFrom(S.picks.a.meals, S.picks.b.meals))); render(); return; }
