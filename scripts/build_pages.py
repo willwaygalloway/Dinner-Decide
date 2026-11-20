@@ -13,6 +13,8 @@ root = Path(__file__).resolve().parent.parent
 src = (root / "index.html").read_text(encoding="utf-8")
 split = src.index("<header")
 head_part, body_part = src[:split], src[split:]
+# The page already declares a viewport for when it is served as-is; the wrapper below adds its own.
+head_part = "\n".join(l for l in head_part.splitlines() if 'name="viewport"' not in l)
 
 icon = ("data:image/svg+xml,"
         "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E"

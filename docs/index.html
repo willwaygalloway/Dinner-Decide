@@ -615,7 +615,7 @@ function viewSetup() {
     <section class="card">
       <h2>${p.a ? "Names and settings" : "Who's deciding?"}</h2>
       <p class="lede">${p.a ? "Change your names, or how many nights a week you plan." : "Enter both your names once. Each phone remembers who it belongs to."}</p>
-      ${LOCAL && !p.a ? `<p class="note">Second phone? If the other person has already set up, ask them to tap Send meals on their Meals tab and open that link here instead.</p>` : ""}
+      ${LOCAL && !p.a ? `<p class="note frost">Second phone? If the other person has already set up, ask them to tap Send meals on their Meals tab and open that link here instead.</p>` : ""}
       <form id="namesForm" class="choice">
         <label>First person<input id="nameA" maxlength="30" required value="${esc(p.a || "")}" autocomplete="given-name"></label>
         <label>Second person<input id="nameB" maxlength="30" required value="${esc(p.b || "")}"></label>
